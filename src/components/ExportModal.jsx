@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { X, Copy, Download } from 'lucide-react';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription,
+  DialogFooter
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Copy, Download, FolderDown, Check } from 'lucide-react';
 
 export function ExportModal({
   isOpen,
@@ -11,7 +22,9 @@ export function ExportModal({
   const [copied, setCopied] = useState(false);
   const [exportFormat, setExportFormat] = useState('markdown');
 
-  if (!isOpen) return null;
+  const handleOpenChange = (open) => {
+    if (!open) onClose();
+  };
 
   const generateMarkdownReport = () => {
     if (!reviewResult) return '# No review available';
@@ -96,31 +109,45 @@ ${reviewResult.unitTests || '// No unit tests'}
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" style={{ maxWidth: '580px' }} onClick={(e) => e.stopPropagation()}>
-        {/* Modal Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-            Export Code Review Report
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-lg bg-card/95 border-border/60 backdrop-blur-xl shadow-2xl">
+        <DialogHeader>
+          <div className="flex items-center gap-2">
+            <div className="size-7 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+              <FolderDown className="size-3.5" />
+            </div>
+            <div>
+              <DialogTitle className="text-sm font-semibold text-foreground">
+                Export Code Review
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Download or copy the full inspection report and generated tests.
+              </DialogDescription>
+            </div>
           </div>
-          <button className="btn-icon" onClick={onClose} aria-label="Close modal">
-            <X size={16} />
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* Format Selector */}
-        <div style={{ padding: '14px 18px 0 18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Format:</span>
-          <div className="mode-tabs">
-            <button 
-              className={`mode-tab ${exportFormat === 'markdown' ? 'active' : ''}`}
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-xs font-medium text-muted-foreground">Output Format</span>
+          <div className="flex rounded-lg bg-muted/50 p-0.5 border border-border/40">
+            <button
               onClick={() => setExportFormat('markdown')}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                exportFormat === 'markdown' 
+                  ? 'bg-background text-foreground shadow-xs' 
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
             >
               Markdown (.md)
             </button>
-            <button 
-              className={`mode-tab ${exportFormat === 'json' ? 'active' : ''}`}
+            <button
               onClick={() => setExportFormat('json')}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                exportFormat === 'json' 
+                  ? 'bg-background text-foreground shadow-xs' 
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
             >
               JSON (.json)
             </button>
@@ -128,39 +155,27 @@ ${reviewResult.unitTests || '// No unit tests'}
         </div>
 
         {/* Report Preview */}
-        <div style={{ padding: '14px 18px' }}>
+        <div className="relative rounded-lg border border-border/40 bg-background/80 overflow-hidden">
           <textarea
             readOnly
             value={reportContent}
             rows={10}
-            style={{
-              width: '100%',
-              background: '#07090e',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: '6px',
-              padding: '10px',
-              color: 'var(--text-primary)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.775rem',
-              lineHeight: '1.4',
-              outline: 'none',
-              resize: 'none'
-            }}
+            className="w-full p-3 font-mono text-[11px] leading-relaxed text-foreground/90 bg-transparent resize-none outline-none"
           />
         </div>
 
         {/* Modal Footer */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', padding: '12px 18px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-primary)' }}>
-          <button className="btn-secondary" onClick={handleCopy}>
-            <Copy size={12} />
-            <span>{copied ? 'Copied' : 'Copy'}</span>
-          </button>
-          <button className="btn-primary" onClick={handleDownload}>
-            <Download size={12} />
+        <DialogFooter className="flex items-center justify-end gap-2 pt-2">
+          <Button variant="outline" size="sm" onClick={handleCopy} className="text-xs gap-1.5">
+            {copied ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
+            <span>{copied ? 'Copied' : 'Copy Report'}</span>
+          </Button>
+          <Button size="sm" onClick={handleDownload} className="text-xs gap-1.5">
+            <Download className="size-3" />
             <span>Download</span>
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

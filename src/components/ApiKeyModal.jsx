@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription,
+  DialogFooter
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { KeyRound, Sparkles } from 'lucide-react';
 
 export function ApiKeyModal({
   isOpen,
@@ -12,7 +23,9 @@ export function ApiKeyModal({
   const [keyInput, setKeyInput] = useState(apiKey || '');
   const [promptInput, setPromptInput] = useState(customPrompt || '');
 
-  if (!isOpen) return null;
+  const handleOpenChange = (open) => {
+    if (!open) onClose();
+  };
 
   const handleSave = () => {
     onSaveApiKey(keyInput.trim());
@@ -26,89 +39,78 @@ export function ApiKeyModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        {/* Modal Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-            API & Engine Configuration
-          </div>
-          <button className="btn-icon" onClick={onClose} aria-label="Close modal">
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Modal Body */}
-        <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div>
-            <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: '6px', color: 'var(--text-primary)' }}>
-              OpenAI API Key
-            </label>
-            <input 
-              type="password"
-              placeholder="sk-..."
-              value={keyInput}
-              onChange={(e) => setKeyInput(e.target.value)}
-              style={{
-                width: '100%',
-                background: 'var(--bg-primary)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '6px',
-                padding: '8px 12px',
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.8125rem',
-                outline: 'none'
-              }}
-            />
-            <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-              Stored locally in browser localStorage or loaded from server-side .env file.
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-md bg-card/95 border-border/60 backdrop-blur-xl shadow-2xl">
+        <DialogHeader>
+          <div className="flex items-center gap-2">
+            <div className="size-7 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+              <KeyRound className="size-3.5" />
+            </div>
+            <div>
+              <DialogTitle className="text-sm font-semibold text-foreground">
+                API & Review Configuration
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Configure custom OpenAI key or tailor AI review instructions.
+              </DialogDescription>
             </div>
           </div>
+        </DialogHeader>
 
-          <div>
-            <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: '6px', color: 'var(--text-primary)' }}>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">
+              OpenAI API Key
+            </label>
+            <Input 
+              type="password"
+              placeholder="sk-proj-..."
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              className="font-mono text-xs bg-background/50 border-input/60 h-9"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Saved strictly in your browser's localStorage or provided by server .env.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">
               Custom Review Guidelines
             </label>
-            <textarea 
+            <Textarea 
               rows={3}
-              placeholder="e.g. Focus on strict PEP-8 compliance, memory optimizations..."
+              placeholder="e.g. Focus on strict concurrency safety, memory leaks, or Google style guide..."
               value={promptInput}
               onChange={(e) => setPromptInput(e.target.value)}
-              style={{
-                width: '100%',
-                background: 'var(--bg-primary)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '6px',
-                padding: '8px 12px',
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-sans)',
-                fontSize: '0.8125rem',
-                outline: 'none',
-                resize: 'vertical'
-              }}
+              className="text-xs bg-background/50 border-input/60 resize-none min-h-[80px]"
             />
           </div>
         </div>
 
-        {/* Modal Footer */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-primary)' }}>
+        <DialogFooter className="flex items-center justify-between sm:justify-between w-full pt-2">
           {keyInput ? (
-            <button className="btn-secondary" onClick={handleClear} style={{ color: 'var(--semantic-error)' }}>
+            <Button 
+              variant="destructive" 
+              size="sm"
+              onClick={handleClear}
+              className="text-xs"
+            >
               Clear Key
-            </button>
+            </Button>
           ) : <div />}
 
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button className="btn-secondary" onClick={onClose}>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={onClose} className="text-xs">
               Cancel
-            </button>
-            <button className="btn-primary" onClick={handleSave}>
-              Save
-            </button>
+            </Button>
+            <Button size="sm" onClick={handleSave} className="text-xs gap-1.5">
+              <Sparkles className="size-3.5" />
+              Save Configuration
+            </Button>
           </div>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

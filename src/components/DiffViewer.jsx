@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { Check, Copy, Sparkles, CheckCheck } from 'lucide-react';
+import { Check, Copy, Sparkles } from 'lucide-react';
 import * as Diff from 'diff';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
 export function DiffViewer({
   originalCode = '',
@@ -26,58 +29,45 @@ export function DiffViewer({
   const diffParts = Diff.diffLines(originalCode, refactoredCode);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', height: '100%' }}>
+    <div className="flex flex-col gap-3 h-full">
       {/* Diff Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="flex items-center justify-between">
         <div>
-          <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+          <div className="text-sm font-semibold text-foreground tracking-tight">
             Refactor & Modernization Diff
           </div>
-          <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-            Line diff of original code vs AI-optimized proposal.
+          <div className="text-xs text-muted-foreground">
+            Side-by-side or line diff of current code vs AI-proposed clean implementation.
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <button className="btn-secondary" onClick={handleCopy}>
-            <Copy size={12} />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleCopy} className="h-7 text-xs gap-1.5">
+            <Copy className="size-3" />
             <span>{copied ? 'Copied' : 'Copy'}</span>
-          </button>
+          </Button>
 
-          <button className="btn-primary" onClick={handleApply}>
-            <Sparkles size={12} />
+          <Button size="sm" onClick={handleApply} className="h-7 text-xs gap-1.5 shadow-sm">
+            <Sparkles className="size-3" />
             <span>{applied ? 'Applied' : 'Apply to Editor'}</span>
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Diff Content Box */}
-      <div 
-        style={{ 
-          background: '#07090e', 
-          border: '1px solid var(--border-subtle)', 
-          borderRadius: '6px', 
-          padding: '10px', 
-          fontFamily: 'var(--font-mono)', 
-          fontSize: '0.775rem', 
-          lineHeight: '1.5', 
-          overflowX: 'auto',
-          maxHeight: '460px',
-          overflowY: 'auto'
-        }}
-      >
+      <div className="rounded-lg border border-border/50 bg-[#07090e] p-3 font-mono text-xs leading-relaxed overflow-x-auto max-h-[500px] overflow-y-auto">
         {diffParts.map((part, index) => {
           let bg = 'transparent';
-          let color = 'var(--text-muted)';
+          let color = 'text-muted-foreground';
           let prefix = ' ';
 
           if (part.added) {
-            bg = 'rgba(16, 185, 129, 0.1)';
-            color = '#86efac';
+            bg = 'bg-emerald-500/10';
+            color = 'text-emerald-300';
             prefix = '+';
           } else if (part.removed) {
-            bg = 'rgba(239, 68, 68, 0.1)';
-            color = '#fca5a5';
+            bg = 'bg-rose-500/10';
+            color = 'text-rose-300';
             prefix = '-';
           }
 
@@ -85,19 +75,14 @@ export function DiffViewer({
           if (lines[lines.length - 1] === '') lines.pop();
 
           return (
-            <div key={index} style={{ backgroundColor: bg }}>
+            <div key={index} className={bg}>
               {lines.map((line, lIdx) => (
                 <div 
                   key={lIdx} 
-                  style={{ 
-                    display: 'flex', 
-                    color: color,
-                    padding: '1px 4px',
-                    whiteSpace: 'pre'
-                  }}
+                  className={`flex px-1.5 py-0.5 whitespace-pre font-mono ${color}`}
                 >
-                  <span style={{ width: '16px', userSelect: 'none', opacity: 0.6 }}>{prefix}</span>
-                  <span>{line}</span>
+                  <span className="w-5 select-none opacity-40 font-mono text-[11px]">{prefix}</span>
+                  <span className="flex-1">{line}</span>
                 </div>
               ))}
             </div>

@@ -8,13 +8,25 @@ import {
   MessageSquare, 
   Send,
   CheckCircle2,
-  XCircle
+  XCircle,
+  AlertTriangle,
+  AlertOctagon,
+  Info,
+  Sparkles,
+  ShieldAlert,
+  Loader2
 } from 'lucide-react';
 import { ScoreGauge } from './ScoreGauge';
 import { DiffViewer } from './DiffViewer';
 import { ComplexityCard } from './ComplexityCard';
 import { REVIEW_MODES } from '../services/aiService';
 import { executeTests, askFollowupChat } from '../services/apiClient';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
 
 export function ReviewPanel({
   reviewResult,
@@ -129,99 +141,110 @@ export function ReviewPanel({
     }
   };
 
+  const getSeverityBadge = (sev) => {
+    switch (sev) {
+      case 'critical':
+        return (
+          <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-bold tracking-wider bg-rose-500/15 text-rose-400 border-rose-500/30 gap-1">
+            <AlertOctagon className="size-2.5" />
+            Critical
+          </Badge>
+        );
+      case 'warning':
+        return (
+          <Badge variant="secondary" className="h-5 px-1.5 text-[10px] uppercase font-bold tracking-wider bg-amber-500/15 text-amber-400 border-amber-500/30 gap-1">
+            <AlertTriangle className="size-2.5" />
+            Warning
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="outline" className="h-5 px-1.5 text-[10px] uppercase font-bold tracking-wider bg-primary/10 text-primary border-primary/25 gap-1">
+            <Info className="size-2.5" />
+            {sev || 'Info'}
+          </Badge>
+        );
+    }
+  };
+
   return (
-    <div className="review-workspace">
+    <div className="flex flex-col h-full bg-background overflow-hidden relative">
       {/* Review Toolbar & Tabs */}
-      <div className="review-toolbar">
-        <div className="mode-tabs">
-          <button 
-            className={`mode-tab ${activeTab === REVIEW_MODES.COMPREHENSIVE ? 'active' : ''}`}
-            onClick={() => onChangeTab(REVIEW_MODES.COMPREHENSIVE)}
-          >
-            Review
-          </button>
+      <div className="h-11 px-4 border-b border-border/40 bg-card/40 flex items-center justify-between shrink-0">
+        <Tabs value={activeTab} onValueChange={onChangeTab} className="h-full">
+          <TabsList className="h-8 bg-muted/40 p-0.5 border border-border/40">
+            <TabsTrigger value={REVIEW_MODES.COMPREHENSIVE} className="text-xs px-3 h-7 data-active:bg-background data-active:text-foreground">
+              Review
+            </TabsTrigger>
+            <TabsTrigger value={REVIEW_MODES.REFACTOR} className="text-xs px-3 h-7 data-active:bg-background data-active:text-foreground">
+              Refactor Diff
+            </TabsTrigger>
+            <TabsTrigger value={REVIEW_MODES.TESTS} className="text-xs px-3 h-7 data-active:bg-background data-active:text-foreground">
+              Unit Tests
+            </TabsTrigger>
+            <TabsTrigger value={REVIEW_MODES.EXPLAIN} className="text-xs px-3 h-7 data-active:bg-background data-active:text-foreground">
+              Explain
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-          <button 
-            className={`mode-tab ${activeTab === REVIEW_MODES.REFACTOR ? 'active' : ''}`}
-            onClick={() => onChangeTab(REVIEW_MODES.REFACTOR)}
-          >
-            Refactor Diff
-          </button>
-
-          <button 
-            className={`mode-tab ${activeTab === REVIEW_MODES.TESTS ? 'active' : ''}`}
-            onClick={() => onChangeTab(REVIEW_MODES.TESTS)}
-          >
-            Unit Tests
-          </button>
-
-          <button 
-            className={`mode-tab ${activeTab === REVIEW_MODES.EXPLAIN ? 'active' : ''}`}
-            onClick={() => onChangeTab(REVIEW_MODES.EXPLAIN)}
-          >
-            Explain
-          </button>
-        </div>
-
-        {/* Severity stats */}
+        {/* Severity stats counter */}
         {reviewResult && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.725rem' }}>
+          <div className="flex items-center gap-1.5">
             {criticalCount > 0 && (
-              <span className="issue-severity severity-critical">
+              <Badge variant="destructive" className="h-5 px-1.5 text-[10px] font-semibold bg-rose-500/15 text-rose-400 border-rose-500/30">
                 {criticalCount} Critical
-              </span>
+              </Badge>
             )}
             {warningCount > 0 && (
-              <span className="issue-severity severity-warning">
+              <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-semibold bg-amber-500/15 text-amber-400 border-amber-500/30">
                 {warningCount} Warnings
-              </span>
+              </Badge>
             )}
           </div>
         )}
       </div>
 
       {/* Review Content Area */}
-      <div className="review-scroll-area">
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5">
         {isReviewing ? (
-          /* Skeleton Loading State */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div className="skeleton-box" style={{ height: '90px' }} />
-            <div className="skeleton-box" style={{ height: '70px' }} />
-            <div className="skeleton-box" style={{ height: '110px' }} />
-            <div className="skeleton-box" style={{ height: '110px' }} />
+          /* Loading State */
+          <div className="flex flex-col gap-3 animate-pulse">
+            <div className="h-24 rounded-xl bg-muted/40 border border-border/30" />
+            <div className="h-20 rounded-xl bg-muted/30 border border-border/30" />
+            <div className="h-32 rounded-xl bg-muted/20 border border-border/30" />
+            <div className="h-32 rounded-xl bg-muted/20 border border-border/30" />
           </div>
         ) : !reviewResult ? (
           /* Empty State */
-          <div className="empty-state-box">
-            <div className="empty-state-title">No Code Review Generated</div>
-            <div className="empty-state-desc">
-              Select a sample snippet or paste source code into the editor on the left to run static analysis and code review.
+          <Card className="flex flex-col items-center justify-center p-12 text-center bg-card/40 border-dashed border-border/60">
+            <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-3">
+              <Sparkles className="size-5" />
             </div>
-            <button className="btn-primary" onClick={onRunReview}>
+            <div className="text-sm font-semibold text-foreground mb-1">
+              No Code Review Generated
+            </div>
+            <p className="text-xs text-muted-foreground max-w-xs mb-4">
+              Select a sample snippet or paste source code into the editor on the left to run static analysis and AI review.
+            </p>
+            <Button size="sm" onClick={onRunReview} className="gap-1.5 text-xs shadow-sm">
+              <Sparkles className="size-3.5" />
               Run Code Review
-            </button>
-          </div>
+            </Button>
+          </Card>
         ) : (
           <>
             {/* Inline notice if any */}
             {reviewResult.apiNotice && (
-              <div 
-                style={{ 
-                  background: 'var(--semantic-warning-subtle)', 
-                  border: '1px solid rgba(245, 158, 11, 0.25)', 
-                  padding: '8px 12px', 
-                  borderRadius: '4px', 
-                  fontSize: '0.75rem', 
-                  color: 'var(--semantic-warning)' 
-                }}
-              >
-                {reviewResult.apiNotice}
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-xs text-amber-400">
+                <AlertTriangle className="size-3.5 shrink-0" />
+                <span>{reviewResult.apiNotice}</span>
               </div>
             )}
 
             {/* TAB 1: REVIEW */}
             {activeTab === REVIEW_MODES.COMPREHENSIVE && (
-              <>
+              <div className="flex flex-col gap-3.5">
                 <ScoreGauge 
                   score={reviewResult.score} 
                   metrics={reviewResult.metrics} 
@@ -234,26 +257,21 @@ export function ReviewPanel({
                 )}
 
                 {/* Severity Filter Controls */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
-                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs font-semibold text-foreground tracking-tight">
                     Findings ({filteredIssues.length})
                   </span>
 
-                  <div style={{ display: 'flex', gap: '2px' }}>
+                  <div className="flex rounded-md bg-muted/50 p-0.5 border border-border/40">
                     {['all', 'critical', 'warning', 'optimization'].map((filter) => (
                       <button
                         key={filter}
                         onClick={() => setSelectedSeverity(filter)}
-                        style={{
-                          fontSize: '0.725rem',
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          border: 'none',
-                          cursor: 'pointer',
-                          textTransform: 'capitalize',
-                          background: selectedSeverity === filter ? 'var(--bg-elevated)' : 'transparent',
-                          color: selectedSeverity === filter ? '#ffffff' : 'var(--text-muted)'
-                        }}
+                        className={`text-[11px] font-medium px-2 py-0.5 rounded capitalize transition-all ${
+                          selectedSeverity === filter
+                            ? 'bg-background text-foreground shadow-xs'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
                       >
                         {filter}
                       </button>
@@ -262,126 +280,123 @@ export function ReviewPanel({
                 </div>
 
                 {/* Issues list */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="flex flex-col gap-2.5">
                   {filteredIssues.map((issue) => {
                     const isExpanded = expandedIssues[issue.id] ?? true;
                     const isChatOpen = activeChatIssueId === issue.id;
                     const history = chatHistory[issue.id] || [];
 
                     return (
-                      <div key={issue.id} className="issue-card">
+                      <Card 
+                        key={issue.id} 
+                        className="bg-card/70 border-border/50 hover:border-border/80 transition-all shadow-xs overflow-hidden"
+                      >
                         <div 
-                          className="issue-header"
+                          className="p-3.5 flex items-start justify-between cursor-pointer gap-3 hover:bg-muted/10 transition-colors"
                           onClick={() => toggleIssue(issue.id)}
                         >
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                            <span className={`issue-severity severity-${issue.severity}`}>
-                              {issue.severity}
-                            </span>
+                          <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                            {getSeverityBadge(issue.severity)}
+                            
                             {issue.line && (
-                              <span 
-                                style={{ 
-                                  fontSize: '0.7rem', 
-                                  fontFamily: 'var(--font-mono)', 
-                                  background: 'var(--bg-surface)',
-                                  padding: '1px 5px',
-                                  borderRadius: '3px',
-                                  color: 'var(--text-muted)',
-                                  border: '1px solid var(--border-subtle)'
-                                }}
-                              >
+                              <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 h-5 bg-muted/40 text-muted-foreground border-border/40">
                                 L{issue.line}
-                              </span>
+                              </Badge>
                             )}
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--text-primary)' }}>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="font-semibold text-xs text-foreground tracking-tight">
                                 {issue.title}
                               </div>
-                              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '1px' }}>
+                              <div className="text-[11px] text-muted-foreground mt-0.5">
                                 {issue.category}
                               </div>
                             </div>
                           </div>
 
-                          <div style={{ color: 'var(--text-muted)' }}>
-                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          <div className="text-muted-foreground shrink-0 mt-0.5">
+                            {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
                           </div>
                         </div>
 
                         {isExpanded && (
-                          <div className="issue-body">
-                            <p style={{ marginBottom: '8px' }}>
+                          <div className="px-3.5 pb-3.5 pt-0 text-xs border-t border-border/30 mt-1">
+                            <p className="text-foreground/90 my-2.5 leading-relaxed">
                               {issue.description}
                             </p>
 
                             {/* Original vs Suggested Snippet */}
                             {issue.originalSnippet && (
-                              <div style={{ marginBottom: '6px' }}>
-                                <div style={{ fontSize: '0.675rem', fontWeight: 600, color: 'var(--semantic-error)', marginBottom: '2px' }}>
+                              <div className="space-y-1 mb-2">
+                                <div className="text-[10px] font-semibold uppercase tracking-wider text-rose-400">
                                   Problematic Code:
                                 </div>
-                                <div className="code-snippet-box code-diff-old">
+                                <div className="rounded-md border border-rose-500/20 bg-rose-500/5 p-2 font-mono text-[11px] text-rose-300 overflow-x-auto">
                                   <code>{issue.originalSnippet}</code>
                                 </div>
                               </div>
                             )}
 
                             {issue.suggestedSnippet && (
-                              <div style={{ marginBottom: '6px' }}>
-                                <div style={{ fontSize: '0.675rem', fontWeight: 600, color: 'var(--semantic-success)', marginBottom: '2px' }}>
+                              <div className="space-y-1 mb-2">
+                                <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
                                   Suggested Fix:
                                 </div>
-                                <div className="code-snippet-box code-diff-new">
+                                <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-2 font-mono text-[11px] text-emerald-300 overflow-x-auto">
                                   <code>{issue.suggestedSnippet}</code>
                                 </div>
                               </div>
                             )}
 
                             {issue.explanation && (
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '6px 10px', borderRadius: '4px', marginBottom: '8px', border: '1px solid var(--border-subtle)' }}>
-                                <strong style={{ color: 'var(--text-primary)' }}>Why: </strong>
-                                {issue.explanation}
+                              <div className="text-xs text-muted-foreground bg-muted/30 border border-border/30 rounded-md p-2.5 mb-2.5">
+                                <span className="font-semibold text-foreground mr-1">Why:</span>
+                                <span>{issue.explanation}</span>
                               </div>
                             )}
 
                             {/* Conversational Follow-up */}
-                            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '8px', marginTop: '8px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <div style={{ display: 'flex', gap: '4px' }}>
-                                  <button 
-                                    className="btn-secondary" 
-                                    style={{ fontSize: '0.7rem', padding: '3px 6px' }}
+                            <div className="border-t border-border/30 pt-2.5 mt-2.5 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
+                                  <Button 
+                                    variant="outline" 
+                                    size="xs"
                                     onClick={() => handleSendFollowup(issue, 'Why is this dangerous in production?')}
+                                    className="text-[11px] h-6 px-2 text-muted-foreground hover:text-foreground border-border/50"
                                   >
                                     Why is this dangerous?
-                                  </button>
-                                  <button 
-                                    className="btn-secondary" 
-                                    style={{ fontSize: '0.7rem', padding: '3px 6px' }}
+                                  </Button>
+                                  <Button 
+                                    variant="outline" 
+                                    size="xs"
                                     onClick={() => handleSendFollowup(issue, 'How do I write a test for this?')}
+                                    className="text-[11px] h-6 px-2 text-muted-foreground hover:text-foreground border-border/50"
                                   >
                                     How to test this?
-                                  </button>
+                                  </Button>
                                 </div>
 
-                                <button 
-                                  className="btn-icon"
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon-xs"
                                   onClick={() => setActiveChatIssueId(isChatOpen ? null : issue.id)}
-                                  title="Ask question"
+                                  title="Ask follow-up question"
+                                  className="text-muted-foreground hover:text-foreground"
                                 >
-                                  <MessageSquare size={13} />
-                                </button>
+                                  <MessageSquare className="size-3.5" />
+                                </Button>
                               </div>
 
                               {/* Chat History */}
                               {history.length > 0 && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px', background: 'var(--bg-surface)', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
+                                <div className="space-y-2 rounded-lg bg-background/70 border border-border/40 p-2.5">
                                   {history.map((msg, mIdx) => (
-                                    <div key={mIdx} style={{ fontSize: '0.75rem', lineHeight: '1.4' }}>
-                                      <strong style={{ color: msg.role === 'user' ? 'var(--accent-primary)' : 'var(--semantic-success)' }}>
-                                        {msg.role === 'user' ? 'You: ' : 'Assistant: '}
-                                      </strong>
-                                      <span style={{ color: 'var(--text-secondary)', whiteSpace: 'pre-line' }}>{msg.text}</span>
+                                    <div key={mIdx} className="text-xs leading-relaxed">
+                                      <span className={`font-semibold mr-1.5 ${msg.role === 'user' ? 'text-primary' : 'text-emerald-400'}`}>
+                                        {msg.role === 'user' ? 'You:' : 'AI:'}
+                                      </span>
+                                      <span className="text-muted-foreground whitespace-pre-line">{msg.text}</span>
                                     </div>
                                   ))}
                                 </div>
@@ -389,44 +404,35 @@ export function ReviewPanel({
 
                               {/* Chat input box */}
                               {isChatOpen && (
-                                <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
-                                  <input 
+                                <div className="flex items-center gap-2 pt-1">
+                                  <Input 
                                     type="text" 
-                                    placeholder="Ask follow-up question..."
+                                    placeholder="Ask follow-up question about this finding..."
                                     value={chatQuestion}
                                     onChange={(e) => setChatQuestion(e.target.value)}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') handleSendFollowup(issue);
                                     }}
-                                    style={{
-                                      flex: 1,
-                                      background: 'var(--bg-surface)',
-                                      border: '1px solid var(--border-subtle)',
-                                      borderRadius: '4px',
-                                      padding: '4px 8px',
-                                      fontSize: '0.75rem',
-                                      color: 'var(--text-primary)',
-                                      outline: 'none'
-                                    }}
+                                    className="h-7 text-xs bg-background/50 border-input/60"
                                   />
-                                  <button 
-                                    className="btn-primary" 
-                                    style={{ padding: '4px 8px' }}
+                                  <Button 
+                                    size="icon-xs" 
                                     onClick={() => handleSendFollowup(issue)}
                                     disabled={chatLoading}
+                                    className="h-7 w-7 shrink-0"
                                   >
-                                    <Send size={12} />
-                                  </button>
+                                    {chatLoading ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />}
+                                  </Button>
                                 </div>
                               )}
                             </div>
                           </div>
                         )}
-                      </div>
+                      </Card>
                     );
                   })}
                 </div>
-              </>
+              </div>
             )}
 
             {/* TAB 2: REFACTOR DIFF */}
@@ -440,58 +446,55 @@ export function ReviewPanel({
 
             {/* TAB 3: UNIT TESTS */}
             {activeTab === REVIEW_MODES.TESTS && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
                   <div>
-                    <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <div className="text-sm font-semibold text-foreground tracking-tight">
                       Automated Unit Tests
                     </div>
-                    <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-                      Executable pytest test suite.
+                    <div className="text-xs text-muted-foreground">
+                      Executable pytest test suite generated for edge-case validation.
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <button className="btn-secondary" onClick={handleCopyTests}>
-                      <Copy size={12} />
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={handleCopyTests} className="h-7 text-xs gap-1.5">
+                      <Copy className="size-3" />
                       <span>{copiedTest ? 'Copied' : 'Copy'}</span>
-                    </button>
+                    </Button>
 
-                    <button 
-                      className="btn-primary"
+                    <Button 
+                      size="sm"
                       onClick={handleExecuteTests}
                       disabled={isRunningTests}
+                      className="h-7 text-xs gap-1.5 shadow-sm"
                     >
-                      <Play size={12} />
+                      {isRunningTests ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
                       <span>{isRunningTests ? 'Running...' : 'Run Tests'}</span>
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
                 {/* TEST RUN RESULT BANNER */}
                 {testRunResult && (
                   <div 
-                    style={{
-                      background: testRunResult.success ? 'var(--semantic-success-subtle)' : 'var(--semantic-error-subtle)',
-                      border: `1px solid ${testRunResult.success ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)'}`,
-                      borderRadius: '6px',
-                      padding: '10px 12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between'
-                    }}
+                    className={`rounded-lg border p-3 flex items-center justify-between ${
+                      testRunResult.success 
+                        ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400' 
+                        : 'bg-rose-500/10 border-rose-500/25 text-rose-400'
+                    }`}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div className="flex items-center gap-2.5">
                       {testRunResult.success ? (
-                        <CheckCircle2 size={16} color="var(--semantic-success)" />
+                        <CheckCircle2 className="size-4 shrink-0 text-emerald-400" />
                       ) : (
-                        <XCircle size={16} color="var(--semantic-error)" />
+                        <XCircle className="size-4 shrink-0 text-rose-400" />
                       )}
                       <div>
-                        <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: testRunResult.success ? 'var(--semantic-success)' : 'var(--semantic-error)' }}>
-                          {testRunResult.success ? 'Tests Passed' : 'Tests Failed'}
+                        <div className="text-xs font-semibold">
+                          {testRunResult.success ? 'All Tests Passed' : 'Tests Failed'}
                         </div>
-                        <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                        <div className="text-[11px] text-muted-foreground">
                           {testRunResult.passed} Passed • {testRunResult.failed} Failed • Runtime: {testRunResult.runtime}s
                         </div>
                       </div>
@@ -500,10 +503,7 @@ export function ReviewPanel({
                 )}
 
                 {/* Test Code Box */}
-                <div 
-                  className="code-snippet-box"
-                  style={{ maxHeight: '420px', overflowY: 'auto', padding: '12px', lineHeight: 1.5 }}
-                >
+                <div className="rounded-lg border border-border/50 bg-[#07090e] p-3 font-mono text-xs leading-relaxed max-h-[460px] overflow-y-auto">
                   <pre><code>{reviewResult.unitTests}</code></pre>
                 </div>
               </div>
@@ -511,26 +511,16 @@ export function ReviewPanel({
 
             {/* TAB 4: EXPLAIN */}
             {activeTab === REVIEW_MODES.EXPLAIN && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              <div className="flex flex-col gap-2.5">
+                <div className="text-sm font-semibold text-foreground tracking-tight">
                   Architecture & Code Explanation
                 </div>
                 
-                <div 
-                  style={{ 
-                    background: 'var(--bg-card)', 
-                    border: '1px solid var(--border-subtle)', 
-                    borderRadius: '6px', 
-                    padding: '14px',
-                    fontSize: '0.8125rem',
-                    lineHeight: 1.6,
-                    color: 'var(--text-secondary)'
-                  }}
-                >
-                  <div style={{ whiteSpace: 'pre-line' }}>
+                <Card className="bg-card/70 border-border/50 backdrop-blur-sm">
+                  <CardContent className="p-4 text-xs leading-relaxed text-muted-foreground whitespace-pre-line">
                     {reviewResult.explanation}
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               </div>
             )}
           </>

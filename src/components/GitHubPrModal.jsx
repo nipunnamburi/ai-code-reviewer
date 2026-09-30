@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { X, ArrowRight } from 'lucide-react';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription,
+  DialogFooter
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { GitPullRequest, ArrowRight, Loader2, GitCommit } from 'lucide-react';
 import { importGitHubPR } from '../services/apiClient';
 
 export function GitHubPrModal({
@@ -12,7 +23,9 @@ export function GitHubPrModal({
   const [error, setError] = useState('');
   const [prData, setPrData] = useState(null);
 
-  if (!isOpen) return null;
+  const handleOpenChange = (open) => {
+    if (!open) onClose();
+  };
 
   const handleFetch = async () => {
     if (!prUrl.trim()) return;
@@ -46,83 +59,79 @@ export function GitHubPrModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" style={{ maxWidth: '560px' }} onClick={(e) => e.stopPropagation()}>
-        {/* Modal Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-            Import GitHub Pull Request
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-lg bg-card/95 border-border/60 backdrop-blur-xl shadow-2xl">
+        <DialogHeader>
+          <div className="flex items-center gap-2">
+            <div className="size-7 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+              <GitPullRequest className="size-3.5" />
+            </div>
+            <div>
+              <DialogTitle className="text-sm font-semibold text-foreground">
+                Import GitHub Pull Request
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Fetch PR changed files & diff directly into the editor for automated review.
+              </DialogDescription>
+            </div>
           </div>
-          <button className="btn-icon" onClick={onClose} aria-label="Close modal">
-            <X size={16} />
-          </button>
-        </div>
+        </DialogHeader>
 
-        {/* Modal Body */}
-        <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div>
-            <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: '6px', color: 'var(--text-primary)' }}>
+        <div className="space-y-4 py-1">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">
               Pull Request URL
             </label>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <input 
+            <div className="flex gap-2">
+              <Input 
                 type="text"
                 placeholder="https://github.com/fastapi/fastapi/pull/12345"
                 value={prUrl}
                 onChange={(e) => setPrUrl(e.target.value)}
-                style={{
-                  flex: 1,
-                  background: 'var(--bg-primary)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '6px',
-                  padding: '8px 12px',
-                  color: 'var(--text-primary)',
-                  fontSize: '0.8125rem',
-                  outline: 'none'
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleFetch();
                 }}
+                className="text-xs bg-background/50 border-input/60 h-9"
               />
-              <button 
-                className="btn-primary" 
+              <Button 
                 onClick={handleFetch}
                 disabled={loading || !prUrl.trim()}
+                size="sm"
+                className="h-9 px-3 text-xs gap-1.5 shrink-0"
               >
-                {loading ? 'Fetching...' : 'Fetch'}
-              </button>
+                {loading && <Loader2 className="size-3 animate-spin" />}
+                <span>{loading ? 'Fetching...' : 'Fetch PR'}</span>
+              </Button>
             </div>
           </div>
 
           {error && (
-            <div style={{ background: 'var(--semantic-error-subtle)', border: '1px solid rgba(239, 68, 68, 0.25)', padding: '8px 12px', borderRadius: '4px', fontSize: '0.75rem', color: 'var(--semantic-error)' }}>
+            <div className="bg-destructive/10 border border-destructive/20 p-2.5 rounded-lg text-xs text-destructive">
               {error}
             </div>
           )}
 
           {prData && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                {prData.files.length} changed file(s) in {prData.owner}/{prData.repo} #{prData.pr_number}:
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{prData.files?.length || 0} modified file(s) in {prData.owner}/{prData.repo} #{prData.pr_number}:</span>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '200px', overflowY: 'auto' }}>
-                {prData.files.map((file, idx) => (
+
+              <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                {prData.files?.map((file, idx) => (
                   <div 
                     key={idx}
                     onClick={() => handleSelectFile(file)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '8px 10px',
-                      background: 'var(--bg-primary)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
+                    className="flex items-center justify-between p-2.5 rounded-lg border border-border/40 bg-background/60 hover:bg-muted/40 hover:border-border cursor-pointer transition-colors group"
                   >
-                    <span style={{ fontSize: '0.775rem', fontFamily: 'var(--font-mono)' }}>{file.filename}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--semantic-success)' }}>+{file.additions}</span>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--semantic-error)' }}>-{file.deletions}</span>
-                      <ArrowRight size={12} color="var(--text-muted)" />
+                    <div className="flex items-center gap-2 truncate pr-2">
+                      <GitCommit className="size-3 text-muted-foreground shrink-0" />
+                      <span className="text-xs font-mono text-foreground truncate">{file.filename}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] font-mono font-medium text-emerald-400">+{file.additions}</span>
+                      <span className="text-[11px] font-mono font-medium text-rose-400">-{file.deletions}</span>
+                      <ArrowRight className="size-3 text-muted-foreground group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
                     </div>
                   </div>
                 ))}
@@ -130,7 +139,7 @@ export function GitHubPrModal({
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

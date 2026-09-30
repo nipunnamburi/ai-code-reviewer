@@ -5,8 +5,11 @@ import {
   Copy, 
   Upload, 
   Check, 
-  Sparkles
+  Sparkles,
+  FileCode2
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
 
 const SUPPORTED_LANGUAGES = [
   { id: 'javascript', name: 'JavaScript' },
@@ -73,19 +76,22 @@ export function CodeEditor({
   const charCount = code ? code.length : 0;
 
   return (
-    <div className="editor-workspace">
+    <div className="flex flex-col h-full bg-background border-r border-border/40 overflow-hidden relative">
       {/* Editor Toolbar */}
-      <div className="editor-toolbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>Source Code</span>
+      <div className="h-11 px-4 border-b border-border/40 bg-card/40 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+            <FileCode2 className="size-3.5 text-primary" />
+            <span>Source Code</span>
+          </div>
           <select 
-            className="select-custom"
+            className="h-7 rounded-md border border-input/60 bg-background/50 px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring transition-colors hover:border-border cursor-pointer"
             value={language}
             onChange={(e) => onChangeLanguage(e.target.value)}
             aria-label="Select Source Language"
           >
             {SUPPORTED_LANGUAGES.map(lang => (
-              <option key={lang.id} value={lang.id}>
+              <option key={lang.id} value={lang.id} className="bg-popover text-foreground">
                 {lang.name}
               </option>
             ))}
@@ -93,59 +99,69 @@ export function CodeEditor({
         </div>
 
         {/* Right action tools */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginRight: '4px' }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-mono text-muted-foreground mr-1 tabular-nums">
             {lineCount} lines • {charCount} chars
           </span>
 
           <input 
             type="file" 
             ref={fileInputRef} 
-            style={{ display: 'none' }} 
+            className="hidden"
             onChange={handleFileUpload} 
           />
 
-          <button 
-            className="btn-icon" 
+          <Button 
+            variant="ghost" 
+            size="icon-xs"
             onClick={() => fileInputRef.current?.click()}
             title="Upload code file"
             aria-label="Upload code file"
+            className="text-muted-foreground hover:text-foreground"
           >
-            <Upload size={14} />
-          </button>
+            <Upload className="size-3.5" />
+          </Button>
 
-          <button 
-            className="btn-icon" 
+          <Button 
+            variant="ghost" 
+            size="icon-xs"
             onClick={handleCopy}
             title="Copy code"
             aria-label="Copy code"
+            className="text-muted-foreground hover:text-foreground"
           >
-            {copied ? <Check size={14} color="var(--semantic-success)" /> : <Copy size={14} />}
-          </button>
+            {copied ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
+          </Button>
 
-          <button 
-            className="btn-icon" 
+          <Button 
+            variant="ghost" 
+            size="icon-xs"
             onClick={handleClear}
             title="Clear editor"
             aria-label="Clear editor"
+            className="text-muted-foreground hover:text-destructive"
           >
-            <Trash2 size={14} />
-          </button>
+            <Trash2 className="size-3.5" />
+          </Button>
 
-          {/* Primary Review Button */}
-          <button 
-            className="btn-primary"
+          <Separator orientation="vertical" className="h-3.5 mx-0.5 opacity-50" />
+
+          {/* Primary Review Action */}
+          <Button 
+            variant="default"
+            size="sm"
             onClick={onRunReview}
             disabled={isReviewing || !code.trim()}
+            className="h-7 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90"
           >
-            <Sparkles size={13} />
+            <Sparkles className="size-3 text-primary-foreground" />
             <span>{isReviewing ? 'Analyzing...' : 'Run Review'}</span>
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Monaco Code Editor */}
-      <div className="editor-body">
+      <div className="flex-1 relative overflow-hidden">
         <Editor
           height="100%"
           language={language === 'react' ? 'javascript' : language}
@@ -165,7 +181,7 @@ export function CodeEditor({
             wordWrap: 'on'
           }}
           loading={
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
+            <div className="flex items-center justify-center h-full text-muted-foreground text-xs">
               Loading editor...
             </div>
           }
