@@ -125,9 +125,9 @@ export function Header({
           onChange={(e) => onSelectModel(e.target.value)}
           aria-label="Select AI Model"
         >
-          {Object.entries(AI_MODELS).map(([key, name]) => (
-            <option key={key} value={key} className="bg-[var(--color-paper-2)] text-[var(--color-ink)]">
-              {name}
+          {AI_MODELS.map((model) => (
+            <option key={model.id} value={model.id} className="bg-[var(--color-paper-2)] text-[var(--color-ink)]">
+              {model.name}
             </option>
           ))}
         </select>

@@ -1,6 +1,7 @@
 /**
  * Frontend API Client communicating with FastAPI Backend
  */
+import { analyzeCode } from './aiService';
 
 const BACKEND_URL = 'http://127.0.0.1:8000';
 
@@ -36,7 +37,6 @@ export async function requestReview({ code, language, mode, apiKey, customInstru
   } catch (error) {
     console.warn('Backend request failed, using client-side fallback:', error);
     // Fallback to client service if backend not running
-    const { analyzeCode } = await import('./aiService');
     const result = await analyzeCode({ code, language, mode, apiKey, customInstructions });
     result.apiNotice = `Note: Running on client-mode (${error.message}). Start FastAPI backend for full AST & test runner.`;
     return result;

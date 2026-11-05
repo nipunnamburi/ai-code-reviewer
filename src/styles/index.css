@@ -4,25 +4,45 @@
 /* Hallmark · genre: atmospheric · theme: Terminal · https://www.usehallmark.com/themes/terminal/ */
 :root {
   color-scheme: dark;
+  --color-paper: #0e1410;
   --color-paper: oklch(12.5% 0.012 150);
+  --color-paper-2: #141c16;
   --color-paper-2: oklch(16% 0.016 150);
+  --color-paper-3: #1b261e;
   --color-paper-3: oklch(20.5% 0.022 150);
+  --color-ink: #e3f3e5;
   --color-ink: oklch(94% 0.03 140);
+  --color-ink-2: #bfd8c3;
   --color-ink-2: oklch(82% 0.05 142);
+  --color-muted: #729077;
   --color-muted: oklch(64% 0.06 145);
+  --color-rule: #233427;
   --color-rule: oklch(27% 0.028 148);
+  --color-rule-2: #364e3c;
   --color-rule-2: oklch(38% 0.045 146);
+  --color-accent: #87e08c;
   --color-accent: oklch(87% 0.2 142);
+  --color-accent-ink: #0d1a0f;
   --color-accent-ink: oklch(14% 0.02 150);
+  --color-focus: #87e08c;
   --color-focus: oklch(87% 0.2 142);
+  --color-accent-wash: #172a1b;
   --color-accent-wash: oklch(23% 0.06 145);
+  --glyph-0: #29382d;
   --glyph-0: oklch(30% 0.06 146);
+  --glyph-1: #354a3a;
   --glyph-1: oklch(38% 0.08 145);
+  --glyph-2: #435e4a;
   --glyph-2: oklch(47% 0.11 144);
+  --glyph-3: #52745a;
   --glyph-3: oklch(57% 0.14 143);
+  --glyph-4: #648f6e;
   --glyph-4: oklch(67% 0.17 142);
+  --glyph-5: #75a982;
   --glyph-5: oklch(77% 0.19 142);
+  --glyph-6: #86c495;
   --glyph-6: oklch(86% 0.2 141);
+  --glyph-7: #a7dfb3;
   --glyph-7: oklch(94% 0.12 138);
 
   --font-sans: 'Martian Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -139,8 +159,8 @@ code, pre {
 /* Workbench Main Grid */
 .workbench-grid {
   flex: 1;
+  min-height: 0;
   display: grid;
-  height: calc(100vh - 48px - 28px); /* minus header & statusbar */
   overflow: hidden;
 }
 
