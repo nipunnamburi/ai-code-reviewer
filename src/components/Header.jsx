@@ -1,17 +1,15 @@
 import React from 'react';
 import { 
-  Code2, 
+  Terminal, 
   KeyRound, 
   GitPullRequest, 
   FolderDown,
   Server,
   Sparkles,
-  ShieldCheck
+  Layers,
+  Users
 } from 'lucide-react';
 import { AI_MODELS } from '../services/aiService';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 
 export function Header({
   selectedModel,
@@ -23,49 +21,76 @@ export function Header({
   onSelectSample,
   samples = [],
   isReviewing,
-  backendOnline
+  backendOnline,
+  activeView,
+  onChangeView,
+  crdtTransactions = 1
 }) {
   const hasCustomKey = Boolean(apiKey && apiKey.trim().startsWith('sk-'));
 
+  const VIEWS = [
+    { id: 'editor', num: '1', label: 'editor' },
+    { id: 'diff', num: '2', label: 'diff' },
+    { id: 'tests', num: '3', label: 'tests' },
+    { id: 'complexity', num: '4', label: 'big-o' }
+  ];
+
   return (
-    <header className="h-14 border-b border-border/40 bg-card/60 backdrop-blur-md px-5 flex items-center justify-between z-40 shrink-0">
-      {/* Brand & Title */}
-      <div className="flex items-center gap-3">
-        <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-sm shadow-primary/5">
-          <Code2 className="size-4.5" />
+    <header className="status-header">
+      {/* Left: Multiplexer Session + Numbered Windows */}
+      <div className="flex items-stretch overflow-x-auto scrollbar-none">
+        {/* Session Badge */}
+        <div className="flex items-center px-3 bg-[var(--color-accent)] text-[var(--color-accent-ink)] font-bold text-xs flex-shrink-0">
+          [0:REVIEWER]
         </div>
-        <div className="flex items-center gap-2.5">
-          <span className="text-sm font-semibold tracking-tight text-foreground">
-            AI Code Review Assistant
-          </span>
-          <Badge variant="outline" className="text-[10px] py-0 px-2 font-medium bg-primary/5 text-primary border-primary/20 gap-1">
-            <Sparkles className="size-2.5" />
-            Hybrid Static + AI
-          </Badge>
-        </div>
+
+        {/* Numbered Views */}
+        <nav className="flex items-stretch flex-shrink-0" aria-label="Multiplexer tabs">
+          {VIEWS.map((tab) => {
+            const isActive = activeView === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onChangeView && onChangeView(tab.id)}
+                className={`flex items-center px-3 border-r border-[var(--color-rule)] text-xs transition-colors whitespace-nowrap ${
+                  isActive
+                    ? "bg-[var(--color-paper-3)] text-[var(--color-ink)] font-semibold shadow-[inset_0_-2px_0_var(--color-accent)]"
+                    : "text-[var(--color-ink-2)] hover:bg-[var(--color-paper-3)] hover:text-[var(--color-ink)]"
+                }`}
+              >
+                <span className="text-[var(--color-muted)] mr-1">{tab.num}:</span>
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </nav>
       </div>
 
-      {/* Control Buttons & Selectors */}
-      <div className="flex items-center gap-2">
+      {/* Right: Controls & Diagnostics */}
+      <div className="flex items-center gap-2.5 flex-shrink-0">
+        {/* CRDT Awareness Badge */}
+        <div className="hidden lg:flex items-center gap-1.5 px-2 py-0.5 border border-[var(--color-rule)] text-[11px] text-[var(--color-muted)]">
+          <Layers className="w-3 h-3 text-[var(--color-accent)]" />
+          <span>crdt: tx_{crdtTransactions}</span>
+        </div>
+
         {/* Backend Status indicator */}
-        <Badge 
-          variant={backendOnline ? "secondary" : "outline"}
-          className={`h-7 px-2.5 text-xs font-normal gap-1.5 transition-colors ${
+        <div 
+          className={`flex items-center gap-1.5 px-2 py-0.5 text-[11px] border ${
             backendOnline 
-              ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' 
-              : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+              ? 'text-[var(--color-accent)] border-[var(--color-accent)] bg-[var(--color-accent-wash)]' 
+              : 'text-[var(--color-muted)] border-[var(--color-rule)]'
           }`}
           title={backendOnline ? "FastAPI backend active" : "Connecting to backend..."}
         >
-          <Server className="size-3 shrink-0" />
-          <span>{backendOnline ? 'FastAPI Active' : 'Connecting...'}</span>
-        </Badge>
-
-        <Separator orientation="vertical" className="h-4 mx-1 opacity-50" />
+          <span className={`w-1.5 h-1.5 ${backendOnline ? 'bg-[var(--color-accent)]' : 'bg-[var(--color-muted)]'}`} />
+          <span>{backendOnline ? 'fastapi :8000' : 'offline'}</span>
+        </div>
 
         {/* Sample Templates Dropdown */}
         <select 
-          className="h-8 rounded-lg border border-input/60 bg-background/50 px-2.5 py-1 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring transition-colors hover:border-border"
+          className="h-7 bg-[var(--color-paper)] border border-[var(--color-rule-2)] px-2 text-[11px] text-[var(--color-ink)] focus:outline-none cursor-pointer"
           defaultValue=""
           onChange={(e) => {
             if (e.target.value) {
@@ -75,63 +100,66 @@ export function Header({
           }}
           aria-label="Load Sample Snippet"
         >
-          <option value="" disabled className="bg-popover text-muted-foreground">Load Sample...</option>
+          <option value="" disabled className="bg-[var(--color-paper-2)] text-[var(--color-muted)]">load sample...</option>
           {samples.map(sample => (
-            <option key={sample.id} value={sample.id} className="bg-popover text-foreground">
+            <option key={sample.id} value={sample.id} className="bg-[var(--color-paper-2)] text-[var(--color-ink)]">
               {sample.title}
             </option>
           ))}
         </select>
 
         {/* GitHub PR Import Button */}
-        <Button 
-          variant="outline" 
-          size="sm"
-          className="h-8 gap-1.5 text-xs font-normal text-muted-foreground hover:text-foreground border-input/60 bg-background/40"
+        <button 
+          type="button"
+          className="btn-terminal-secondary text-[11px] py-1 px-2.5"
           onClick={onOpenPrModal}
         >
-          <GitPullRequest className="size-3.5 text-foreground/70" />
-          <span>Import PR</span>
-        </Button>
+          <GitPullRequest className="w-3 h-3 text-[var(--color-muted)]" />
+          <span>import pr</span>
+        </button>
 
         {/* Model Selector */}
         <select 
-          className="h-8 rounded-lg border border-input/60 bg-background/50 px-2.5 py-1 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring transition-colors hover:border-border"
+          className="h-7 bg-[var(--color-paper)] border border-[var(--color-rule-2)] px-2 text-[11px] text-[var(--color-ink)] focus:outline-none cursor-pointer"
           value={selectedModel}
           onChange={(e) => onSelectModel(e.target.value)}
           aria-label="Select AI Model"
         >
-          {AI_MODELS.map(m => (
-            <option key={m.id} value={m.id} className="bg-popover text-foreground">
-              {m.name}
+          {Object.entries(AI_MODELS).map(([key, name]) => (
+            <option key={key} value={key} className="bg-[var(--color-paper-2)] text-[var(--color-ink)]">
+              {name}
             </option>
           ))}
         </select>
 
-        <Separator orientation="vertical" className="h-4 mx-1 opacity-50" />
-
-        {/* API Key Modal Trigger */}
-        <Button 
-          variant="outline" 
-          size="sm"
-          className="h-8 gap-1.5 text-xs font-normal border-input/60 bg-background/40 hover:bg-muted/40"
+        {/* API Key settings button */}
+        <button 
+          type="button"
           onClick={onOpenApiKeyModal}
+          className={`btn-terminal-secondary text-[11px] py-1 px-2 ${
+            hasCustomKey ? 'border-[var(--color-accent)] text-[var(--color-accent)]' : ''
+          }`}
+          title={hasCustomKey ? 'Custom OpenAI Key Configured' : 'Configure API Key'}
         >
-          <KeyRound className="size-3.5 text-foreground/70" />
-          <span>{hasCustomKey ? 'Key Configured' : 'Settings'}</span>
-          {hasCustomKey && <span className="size-1.5 rounded-full bg-emerald-400"></span>}
-        </Button>
+          <KeyRound className="w-3 h-3" />
+          <span>{hasCustomKey ? 'key: set' : 'key'}</span>
+        </button>
 
         {/* Export Report */}
-        <Button 
-          variant="outline" 
-          size="sm"
-          className="h-8 gap-1.5 text-xs font-normal border-input/60 bg-background/40 hover:bg-muted/40"
+        <button 
+          type="button"
+          className="btn-terminal-secondary text-[11px] py-1 px-2"
           onClick={onOpenExportModal}
+          title="Export Review as Markdown or JSON"
         >
-          <FolderDown className="size-3.5 text-foreground/70" />
-          <span>Export</span>
-        </Button>
+          <FolderDown className="w-3 h-3" />
+          <span>export</span>
+        </button>
+
+        {/* Exit Code / Status */}
+        <div className="hidden sm:flex items-center text-[11px] text-[var(--color-accent)] font-semibold pl-1">
+          exit 0
+        </div>
       </div>
     </header>
   );

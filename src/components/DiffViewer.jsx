@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
-import { Check, Copy, Sparkles } from 'lucide-react';
+import { Check, Copy, Play } from 'lucide-react';
 import * as Diff from 'diff';
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 
 export function DiffViewer({
   originalCode = '',
@@ -16,79 +13,109 @@ export function DiffViewer({
   const handleCopy = () => {
     navigator.clipboard.writeText(refactoredCode);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 1400);
   };
 
   const handleApply = () => {
     onApplyRefactor(refactoredCode);
     setApplied(true);
-    setTimeout(() => setApplied(false), 2000);
+    setTimeout(() => setApplied(false), 1400);
   };
 
   // Compute line-by-line diff
   const diffParts = Diff.diffLines(originalCode, refactoredCode);
 
+  let lineNumber = 1;
+
   return (
-    <div className="flex flex-col gap-3 h-full">
+    <div className="flex flex-col gap-3 font-mono">
       {/* Diff Toolbar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between border-b border-[var(--color-rule)] pb-2">
         <div>
-          <div className="text-sm font-semibold text-foreground tracking-tight">
-            Refactor & Modernization Diff
+          <div className="text-xs font-semibold text-[var(--color-ink)] uppercase tracking-wide">
+            unified diff · refactor proposal
           </div>
-          <div className="text-xs text-muted-foreground">
-            Side-by-side or line diff of current code vs AI-proposed clean implementation.
+          <div className="text-[11px] text-[var(--color-muted)]">
+            deterministic line differences between source buffer and AI remediation.
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleCopy} className="h-7 text-xs gap-1.5">
-            <Copy className="size-3" />
-            <span>{copied ? 'Copied' : 'Copy'}</span>
-          </Button>
+          <button 
+            type="button" 
+            onClick={handleCopy} 
+            className="btn-terminal-secondary text-[11px] py-1 px-2.5"
+          >
+            {copied ? <Check className="w-3 h-3 text-[var(--color-accent)]" /> : <Copy className="w-3 h-3" />}
+            <span>{copied ? 'copied' : 'copy'}</span>
+          </button>
 
-          <Button size="sm" onClick={handleApply} className="h-7 text-xs gap-1.5 shadow-sm">
-            <Sparkles className="size-3" />
-            <span>{applied ? 'Applied' : 'Apply to Editor'}</span>
-          </Button>
+          <button 
+            type="button" 
+            onClick={handleApply} 
+            className="btn-terminal-primary text-[11px] py-1 px-3"
+          >
+            <Check className="w-3 h-3" />
+            <span>{applied ? 'applied' : 'apply to editor'}</span>
+          </button>
         </div>
       </div>
 
-      {/* Diff Content Box */}
-      <div className="rounded-lg border border-border/50 bg-[#07090e] p-3 font-mono text-xs leading-relaxed overflow-x-auto max-h-[500px] overflow-y-auto">
-        {diffParts.map((part, index) => {
-          let bg = 'transparent';
-          let color = 'text-muted-foreground';
-          let prefix = ' ';
+      {/* Signature Hallmark Terminal Unified Diff Container */}
+      <div className="diff-container text-xs">
+        <div className="diff-header flex items-center justify-between">
+          <div>
+            <span className="text-[var(--color-muted)]">--- a/source_buffer.raw</span>
+            <br />
+            <span className="text-[var(--color-accent)]">+++ b/refactored_buffer.clean</span>
+          </div>
+          <span className="text-[var(--color-muted)]">@@ -1,len +1,len @@</span>
+        </div>
 
-          if (part.added) {
-            bg = 'bg-emerald-500/10';
-            color = 'text-emerald-300';
-            prefix = '+';
-          } else if (part.removed) {
-            bg = 'bg-rose-500/10';
-            color = 'text-rose-300';
-            prefix = '-';
-          }
+        <div className="p-2 overflow-x-auto max-h-[460px] overflow-y-auto divide-y divide-[var(--color-rule)]">
+          {diffParts.map((part, index) => {
+            let lineClass = '';
+            let marker = ' ';
 
-          const lines = part.value.split('\n');
-          if (lines[lines.length - 1] === '') lines.pop();
+            if (part.added) {
+              lineClass = 'add';
+              marker = '+';
+            } else if (part.removed) {
+              lineClass = 'del';
+              marker = '-';
+            }
 
-          return (
-            <div key={index} className={bg}>
-              {lines.map((line, lIdx) => (
-                <div 
-                  key={lIdx} 
-                  className={`flex px-1.5 py-0.5 whitespace-pre font-mono ${color}`}
-                >
-                  <span className="w-5 select-none opacity-40 font-mono text-[11px]">{prefix}</span>
-                  <span className="flex-1">{line}</span>
-                </div>
-              ))}
-            </div>
-          );
-        })}
+            const lines = part.value.split('\n');
+            if (lines[lines.length - 1] === '') lines.pop();
+
+            return (
+              <div key={index}>
+                {lines.map((line, lIdx) => {
+                  const currentLineNum = lineNumber++;
+                  return (
+                    <div 
+                      key={lIdx} 
+                      className={`diff-line py-1 ${lineClass}`}
+                    >
+                      <span className="text-[var(--color-rule-2)] text-right pr-3 select-none text-[11px]">
+                        {String(currentLineNum).padStart(2, '0')}
+                      </span>
+                      <span className={`select-none font-bold ${part.added ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]'}`}>
+                        {marker}
+                      </span>
+                      <span className="whitespace-pre overflow-x-auto">
+                        {line || ' '}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 }
+
+export default DiffViewer;

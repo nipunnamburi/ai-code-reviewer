@@ -1,81 +1,70 @@
 import React from 'react';
-import { Activity, Clock, Database, Target, ArrowUpRight } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Activity, Clock, Database, Target } from 'lucide-react';
 
 export function ComplexityCard({ complexity }) {
   if (!complexity) return null;
 
-  const isHighTime = complexity.time?.includes('n²') || complexity.time?.includes('2^') || complexity.time?.includes('n!');
-
   return (
-    <Card className="bg-card/70 border-border/50 backdrop-blur-sm shadow-xs">
-      <CardHeader className="py-3 px-4 pb-2 border-b border-border/30">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Activity className="size-4 text-primary" />
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-foreground">
-              Big-O & Algorithmic Complexity
-            </CardTitle>
-          </div>
-          <Badge variant="outline" className="text-[10px] font-mono py-0 px-2 bg-primary/5 text-primary border-primary/20">
-            DSA Profiler
-          </Badge>
+    <div className="terminal-well p-4 font-mono">
+      <div className="flex items-center justify-between border-b border-[var(--color-rule)] pb-2 mb-3 text-xs">
+        <div className="flex items-center gap-2">
+          <Activity className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+          <span className="font-semibold text-[var(--color-ink)] uppercase tracking-wide">
+            big-o & algorithmic complexity
+          </span>
         </div>
-      </CardHeader>
+        <span className="text-[10px] px-1.5 py-0.5 border border-[var(--color-rule)] text-[var(--color-accent)]">
+          dsa_profiler
+        </span>
+      </div>
 
-      <CardContent className="p-4 space-y-3">
-        {/* Metric Cards Grid */}
-        <div className="grid grid-cols-3 gap-2.5">
-          {/* Time Complexity */}
-          <div className="rounded-lg border border-border/40 bg-background/50 p-2.5 space-y-1">
-            <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-              <Clock className="size-3" />
-              <span>Time</span>
-            </div>
-            <div className={`text-base font-bold font-mono ${isHighTime ? 'text-rose-400' : 'text-primary'}`}>
-              {complexity.time || 'O(n)'}
-            </div>
+      {/* Figures as Tool's Output Grid */}
+      <div className="grid grid-cols-3 border border-[var(--color-rule)] bg-[var(--color-paper)] mb-3">
+        <div className="p-3 border-r border-[var(--color-rule)]">
+          <div className="figure-output text-xl text-[var(--color-accent)] mb-1">
+            {complexity.time || 'O(n)'}
           </div>
-
-          {/* Space Complexity */}
-          <div className="rounded-lg border border-border/40 bg-background/50 p-2.5 space-y-1">
-            <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-              <Database className="size-3" />
-              <span>Space</span>
-            </div>
-            <div className="text-base font-bold font-mono text-foreground">
-              {complexity.space || 'O(1)'}
-            </div>
-          </div>
-
-          {/* Target Optimal Complexity */}
-          <div className="rounded-lg border border-border/40 bg-background/50 p-2.5 space-y-1">
-            <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-              <Target className="size-3" />
-              <span>Target</span>
-            </div>
-            <div className="text-base font-bold font-mono text-emerald-400">
-              {complexity.targetComplexity || 'O(n)'}
-            </div>
+          <div className="text-[10.5px] text-[var(--color-muted)]">
+            # time complexity
           </div>
         </div>
 
-        {/* Bottleneck & DSA Strategy */}
-        {complexity.bottleneck && (
-          <div className="text-xs text-foreground/90 bg-muted/20 border border-border/30 rounded-md p-2.5">
-            <span className="font-semibold text-rose-400 mr-1.5">Bottleneck:</span>
-            <span className="text-muted-foreground">{complexity.bottleneck}</span>
+        <div className="p-3 border-r border-[var(--color-rule)]">
+          <div className="figure-output text-xl text-[var(--color-ink)] mb-1">
+            {complexity.space || 'O(1)'}
           </div>
-        )}
+          <div className="text-[10.5px] text-[var(--color-muted)]">
+            # space complexity
+          </div>
+        </div>
 
-        {complexity.explanation && (
-          <div className="text-xs text-muted-foreground bg-primary/5 border border-primary/15 rounded-md p-2.5">
-            <span className="font-semibold text-primary mr-1.5">Optimization:</span>
-            <span>{complexity.explanation}</span>
+        <div className="p-3">
+          <div className="figure-output text-xl text-[var(--color-accent)] mb-1">
+            {complexity.targetComplexity || 'O(n)'}
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <div className="text-[10.5px] text-[var(--color-muted)]">
+            # target optimal
+          </div>
+        </div>
+      </div>
+
+      {/* Bottleneck description */}
+      {complexity.bottleneck && (
+        <div className="text-xs p-2.5 bg-[var(--color-paper)] border border-[var(--color-rule)] mb-2">
+          <span className="text-[var(--color-accent)] font-semibold mr-1.5">[BOTTLENECK]:</span>
+          <span className="text-[var(--color-ink-2)]">{complexity.bottleneck}</span>
+        </div>
+      )}
+
+      {/* Optimization path */}
+      {complexity.explanation && (
+        <div className="text-xs p-2.5 bg-[var(--color-accent-wash)] border border-[var(--color-accent)] text-[var(--color-ink)]">
+          <span className="text-[var(--color-accent)] font-semibold mr-1.5">[OPTIMIZATION]:</span>
+          <span>{complexity.explanation}</span>
+        </div>
+      )}
+    </div>
   );
 }
+
+export default ComplexityCard;

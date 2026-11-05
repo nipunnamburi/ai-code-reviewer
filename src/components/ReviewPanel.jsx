@@ -7,13 +7,10 @@ import {
   Play, 
   MessageSquare, 
   Send,
-  CheckCircle2,
-  XCircle,
   AlertTriangle,
   AlertOctagon,
   Info,
   Sparkles,
-  ShieldAlert,
   Loader2
 } from 'lucide-react';
 import { ScoreGauge } from './ScoreGauge';
@@ -21,12 +18,6 @@ import { DiffViewer } from './DiffViewer';
 import { ComplexityCard } from './ComplexityCard';
 import { REVIEW_MODES } from '../services/aiService';
 import { executeTests, askFollowupChat } from '../services/apiClient';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
-import { Input } from '@/components/ui/input';
 
 export function ReviewPanel({
   reviewResult,
@@ -73,7 +64,7 @@ export function ReviewPanel({
     if (reviewResult?.unitTests) {
       navigator.clipboard.writeText(reviewResult.unitTests);
       setCopiedTest(true);
-      setTimeout(() => setCopiedTest(false), 2000);
+      setTimeout(() => setCopiedTest(false), 1400);
     }
   };
 
@@ -145,106 +136,112 @@ export function ReviewPanel({
     switch (sev) {
       case 'critical':
         return (
-          <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-bold tracking-wider bg-rose-500/15 text-rose-400 border-rose-500/30 gap-1">
-            <AlertOctagon className="size-2.5" />
-            Critical
-          </Badge>
+          <span className="badge-terminal border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-accent-wash)] uppercase font-bold text-[10px]">
+            [CRITICAL]
+          </span>
         );
       case 'warning':
         return (
-          <Badge variant="secondary" className="h-5 px-1.5 text-[10px] uppercase font-bold tracking-wider bg-amber-500/15 text-amber-400 border-amber-500/30 gap-1">
-            <AlertTriangle className="size-2.5" />
-            Warning
-          </Badge>
+          <span className="badge-terminal border-[var(--color-rule-2)] text-[var(--color-ink)] uppercase font-semibold text-[10px]">
+            [WARNING]
+          </span>
         );
       default:
         return (
-          <Badge variant="outline" className="h-5 px-1.5 text-[10px] uppercase font-bold tracking-wider bg-primary/10 text-primary border-primary/25 gap-1">
-            <Info className="size-2.5" />
-            {sev || 'Info'}
-          </Badge>
+          <span className="badge-terminal border-[var(--color-rule)] text-[var(--color-muted)] uppercase text-[10px]">
+            [{sev || 'INFO'}]
+          </span>
         );
     }
   };
 
+  const TABS = [
+    { id: REVIEW_MODES.COMPREHENSIVE, label: 'audit findings' },
+    { id: REVIEW_MODES.REFACTOR, label: 'refactor diff' },
+    { id: REVIEW_MODES.TESTS, label: 'pytest suites' },
+    { id: REVIEW_MODES.EXPLAIN, label: 'explanation' }
+  ];
+
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden relative">
+    <div className="flex flex-col h-full bg-[var(--color-paper)] overflow-hidden relative font-mono">
       {/* Review Toolbar & Tabs */}
-      <div className="h-11 px-4 border-b border-border/40 bg-card/40 flex items-center justify-between shrink-0">
-        <Tabs value={activeTab} onValueChange={onChangeTab} className="h-full">
-          <TabsList className="h-8 bg-muted/40 p-0.5 border border-border/40">
-            <TabsTrigger value={REVIEW_MODES.COMPREHENSIVE} className="text-xs px-3 h-7 data-active:bg-background data-active:text-foreground">
-              Review
-            </TabsTrigger>
-            <TabsTrigger value={REVIEW_MODES.REFACTOR} className="text-xs px-3 h-7 data-active:bg-background data-active:text-foreground">
-              Refactor Diff
-            </TabsTrigger>
-            <TabsTrigger value={REVIEW_MODES.TESTS} className="text-xs px-3 h-7 data-active:bg-background data-active:text-foreground">
-              Unit Tests
-            </TabsTrigger>
-            <TabsTrigger value={REVIEW_MODES.EXPLAIN} className="text-xs px-3 h-7 data-active:bg-background data-active:text-foreground">
-              Explain
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+      <div className="h-10 px-3 border-b border-[var(--color-rule)] bg-[var(--color-paper-2)] flex items-center justify-between shrink-0 text-xs">
+        <div className="flex items-stretch h-full">
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onChangeTab(tab.id)}
+                className={`px-3 flex items-center border-r border-[var(--color-rule)] text-[11px] whitespace-nowrap transition-colors ${
+                  isActive
+                    ? "bg-[var(--color-paper-3)] text-[var(--color-ink)] font-semibold shadow-[inset_0_-2px_0_var(--color-accent)]"
+                    : "text-[var(--color-muted)] hover:bg-[var(--color-paper-3)] hover:text-[var(--color-ink)]"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
 
         {/* Severity stats counter */}
         {reviewResult && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 text-[10.5px]">
             {criticalCount > 0 && (
-              <Badge variant="destructive" className="h-5 px-1.5 text-[10px] font-semibold bg-rose-500/15 text-rose-400 border-rose-500/30">
-                {criticalCount} Critical
-              </Badge>
+              <span className="px-1.5 py-0.5 border border-[var(--color-accent)] text-[var(--color-accent)]">
+                {criticalCount} critical
+              </span>
             )}
             {warningCount > 0 && (
-              <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-semibold bg-amber-500/15 text-amber-400 border-amber-500/30">
-                {warningCount} Warnings
-              </Badge>
+              <span className="px-1.5 py-0.5 border border-[var(--color-rule-2)] text-[var(--color-ink-2)]">
+                {warningCount} warnings
+              </span>
             )}
           </div>
         )}
       </div>
 
       {/* Review Content Area */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5">
+      <div className="flex-1 overflow-y-auto p-3.5 flex flex-col gap-3">
         {isReviewing ? (
           /* Loading State */
-          <div className="flex flex-col gap-3 animate-pulse">
-            <div className="h-24 rounded-xl bg-muted/40 border border-border/30" />
-            <div className="h-20 rounded-xl bg-muted/30 border border-border/30" />
-            <div className="h-32 rounded-xl bg-muted/20 border border-border/30" />
-            <div className="h-32 rounded-xl bg-muted/20 border border-border/30" />
+          <div className="flex flex-col gap-2.5 animate-pulse">
+            <div className="h-20 bg-[var(--color-paper-2)] border border-[var(--color-rule)]" />
+            <div className="h-16 bg-[var(--color-paper-2)] border border-[var(--color-rule)]" />
+            <div className="h-28 bg-[var(--color-paper-2)] border border-[var(--color-rule)]" />
           </div>
         ) : !reviewResult ? (
           /* Empty State */
-          <Card className="flex flex-col items-center justify-center p-12 text-center bg-card/40 border-dashed border-border/60">
-            <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-3">
-              <Sparkles className="size-5" />
+          <div className="flex flex-col items-center justify-center p-10 text-center border border-dashed border-[var(--color-rule)] bg-[var(--color-paper-2)]">
+            <div className="text-xs font-semibold text-[var(--color-ink)] mb-1">
+              // NO CODE REVIEW BUFFER LOADED
             </div>
-            <div className="text-sm font-semibold text-foreground mb-1">
-              No Code Review Generated
-            </div>
-            <p className="text-xs text-muted-foreground max-w-xs mb-4">
-              Select a sample snippet or paste source code into the editor on the left to run static analysis and AI review.
+            <p className="text-[11px] text-[var(--color-muted)] max-w-xs mb-3">
+              $ select a snippet from the left sidebar or paste code to execute hybrid static + LLM analysis.
             </p>
-            <Button size="sm" onClick={onRunReview} className="gap-1.5 text-xs shadow-sm">
-              <Sparkles className="size-3.5" />
-              Run Code Review
-            </Button>
-          </Card>
+            <button 
+              type="button" 
+              onClick={onRunReview} 
+              className="btn-terminal-primary text-[11px]"
+            >
+              <Play className="w-3 h-3 fill-current" />
+              <span>run review</span>
+            </button>
+          </div>
         ) : (
           <>
             {/* Inline notice if any */}
             {reviewResult.apiNotice && (
-              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-xs text-amber-400">
-                <AlertTriangle className="size-3.5 shrink-0" />
-                <span>{reviewResult.apiNotice}</span>
+              <div className="p-2 border border-[var(--color-rule)] bg-[var(--color-paper-2)] text-[11px] text-[var(--color-accent)]">
+                // NOTICE: {reviewResult.apiNotice}
               </div>
             )}
 
-            {/* TAB 1: REVIEW */}
+            {/* TAB 1: REVIEW FINDINGS */}
             {activeTab === REVIEW_MODES.COMPREHENSIVE && (
-              <div className="flex flex-col gap-3.5">
+              <div className="flex flex-col gap-3">
                 <ScoreGauge 
                   score={reviewResult.score} 
                   metrics={reviewResult.metrics} 
@@ -257,20 +254,21 @@ export function ReviewPanel({
                 )}
 
                 {/* Severity Filter Controls */}
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-xs font-semibold text-foreground tracking-tight">
-                    Findings ({filteredIssues.length})
+                <div className="flex items-center justify-between border-b border-[var(--color-rule)] pb-1.5 text-xs">
+                  <span className="font-semibold text-[var(--color-ink)] uppercase tracking-wide text-[11px]">
+                    findings ({filteredIssues.length})
                   </span>
 
-                  <div className="flex rounded-md bg-muted/50 p-0.5 border border-border/40">
+                  <div className="flex border border-[var(--color-rule)]">
                     {['all', 'critical', 'warning', 'optimization'].map((filter) => (
                       <button
                         key={filter}
+                        type="button"
                         onClick={() => setSelectedSeverity(filter)}
-                        className={`text-[11px] font-medium px-2 py-0.5 rounded capitalize transition-all ${
+                        className={`text-[10.5px] px-2 py-0.5 capitalize transition-colors ${
                           selectedSeverity === filter
-                            ? 'bg-background text-foreground shadow-xs'
-                            : 'text-muted-foreground hover:text-foreground'
+                            ? 'bg-[var(--color-accent)] text-[var(--color-accent-ink)] font-bold'
+                            : 'text-[var(--color-muted)] hover:text-[var(--color-ink)]'
                         }`}
                       >
                         {filter}
@@ -280,123 +278,121 @@ export function ReviewPanel({
                 </div>
 
                 {/* Issues list */}
-                <div className="flex flex-col gap-2.5">
+                <div className="flex flex-col gap-2">
                   {filteredIssues.map((issue) => {
                     const isExpanded = expandedIssues[issue.id] ?? true;
                     const isChatOpen = activeChatIssueId === issue.id;
                     const history = chatHistory[issue.id] || [];
 
                     return (
-                      <Card 
+                      <div 
                         key={issue.id} 
-                        className="bg-card/70 border-border/50 hover:border-border/80 transition-all shadow-xs overflow-hidden"
+                        className="terminal-well border border-[var(--color-rule)]"
                       >
                         <div 
-                          className="p-3.5 flex items-start justify-between cursor-pointer gap-3 hover:bg-muted/10 transition-colors"
+                          className="p-3 flex items-start justify-between cursor-pointer gap-2 hover:bg-[var(--color-paper-3)] transition-colors"
                           onClick={() => toggleIssue(issue.id)}
                         >
-                          <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                          <div className="flex items-start gap-2 flex-1 min-w-0">
                             {getSeverityBadge(issue.severity)}
                             
                             {issue.line && (
-                              <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 h-5 bg-muted/40 text-muted-foreground border-border/40">
+                              <span className="text-[10px] px-1 py-0.2 border border-[var(--color-rule-2)] text-[var(--color-muted)]">
                                 L{issue.line}
-                              </Badge>
+                              </span>
                             )}
 
                             <div className="min-w-0 flex-1">
-                              <div className="font-semibold text-xs text-foreground tracking-tight">
+                              <div className="font-semibold text-xs text-[var(--color-ink)] truncate">
                                 {issue.title}
                               </div>
-                              <div className="text-[11px] text-muted-foreground mt-0.5">
-                                {issue.category}
+                              <div className="text-[10.5px] text-[var(--color-muted)] mt-0.5">
+                                category: {issue.category}
                               </div>
                             </div>
                           </div>
 
-                          <div className="text-muted-foreground shrink-0 mt-0.5">
-                            {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                          <div className="text-[var(--color-muted)] shrink-0">
+                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                           </div>
                         </div>
 
                         {isExpanded && (
-                          <div className="px-3.5 pb-3.5 pt-0 text-xs border-t border-border/30 mt-1">
-                            <p className="text-foreground/90 my-2.5 leading-relaxed">
+                          <div className="px-3 pb-3 pt-0 text-xs border-t border-[var(--color-rule)] mt-1">
+                            <p className="text-[var(--color-ink-2)] my-2 text-[11.5px] leading-relaxed">
                               {issue.description}
                             </p>
 
-                            {/* Original vs Suggested Snippet */}
+                            {/* Problematic Code Snippet */}
                             {issue.originalSnippet && (
                               <div className="space-y-1 mb-2">
-                                <div className="text-[10px] font-semibold uppercase tracking-wider text-rose-400">
-                                  Problematic Code:
+                                <div className="text-[10px] uppercase font-semibold text-[var(--color-muted)]">
+                                  # problematic code:
                                 </div>
-                                <div className="rounded-md border border-rose-500/20 bg-rose-500/5 p-2 font-mono text-[11px] text-rose-300 overflow-x-auto">
-                                  <code>{issue.originalSnippet}</code>
+                                <div className="p-2 border border-[var(--color-rule)] bg-[var(--color-paper)] text-[11px] text-[var(--color-muted)] overflow-x-auto">
+                                  <code>- {issue.originalSnippet}</code>
                                 </div>
                               </div>
                             )}
 
+                            {/* Suggested Fix Snippet */}
                             {issue.suggestedSnippet && (
                               <div className="space-y-1 mb-2">
-                                <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
-                                  Suggested Fix:
+                                <div className="text-[10px] uppercase font-semibold text-[var(--color-accent)]">
+                                  # suggested remediation:
                                 </div>
-                                <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-2 font-mono text-[11px] text-emerald-300 overflow-x-auto">
-                                  <code>{issue.suggestedSnippet}</code>
+                                <div className="p-2 border border-[var(--color-accent)] bg-[var(--color-accent-wash)] text-[11px] text-[var(--color-ink)] overflow-x-auto">
+                                  <code>+ {issue.suggestedSnippet}</code>
                                 </div>
                               </div>
                             )}
 
                             {issue.explanation && (
-                              <div className="text-xs text-muted-foreground bg-muted/30 border border-border/30 rounded-md p-2.5 mb-2.5">
-                                <span className="font-semibold text-foreground mr-1">Why:</span>
+                              <div className="text-[11px] text-[var(--color-muted)] bg-[var(--color-paper)] border border-[var(--color-rule)] p-2 mb-2">
+                                <span className="text-[var(--color-ink)] font-semibold mr-1">// why:</span>
                                 <span>{issue.explanation}</span>
                               </div>
                             )}
 
                             {/* Conversational Follow-up */}
-                            <div className="border-t border-border/30 pt-2.5 mt-2.5 space-y-2">
+                            <div className="border-t border-[var(--color-rule)] pt-2 mt-2 space-y-2">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-1.5">
-                                  <Button 
-                                    variant="outline" 
-                                    size="xs"
+                                  <button 
+                                    type="button"
                                     onClick={() => handleSendFollowup(issue, 'Why is this dangerous in production?')}
-                                    className="text-[11px] h-6 px-2 text-muted-foreground hover:text-foreground border-border/50"
+                                    className="btn-terminal-secondary text-[10px] py-0.5 px-2"
                                   >
-                                    Why is this dangerous?
-                                  </Button>
-                                  <Button 
-                                    variant="outline" 
-                                    size="xs"
+                                    why dangerous?
+                                  </button>
+                                  <button 
+                                    type="button"
                                     onClick={() => handleSendFollowup(issue, 'How do I write a test for this?')}
-                                    className="text-[11px] h-6 px-2 text-muted-foreground hover:text-foreground border-border/50"
+                                    className="btn-terminal-secondary text-[10px] py-0.5 px-2"
                                   >
-                                    How to test this?
-                                  </Button>
+                                    how to test?
+                                  </button>
                                 </div>
 
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon-xs"
+                                <button 
+                                  type="button"
                                   onClick={() => setActiveChatIssueId(isChatOpen ? null : issue.id)}
-                                  title="Ask follow-up question"
-                                  className="text-muted-foreground hover:text-foreground"
+                                  title="Ask follow-up"
+                                  className="p-1 border border-transparent hover:border-[var(--color-rule)] text-[var(--color-muted)] hover:text-[var(--color-ink)]"
                                 >
-                                  <MessageSquare className="size-3.5" />
-                                </Button>
+                                  <MessageSquare className="w-3.5 h-3.5" />
+                                </button>
                               </div>
 
                               {/* Chat History */}
                               {history.length > 0 && (
-                                <div className="space-y-2 rounded-lg bg-background/70 border border-border/40 p-2.5">
+                                <div className="space-y-1.5 p-2 bg-[var(--color-paper)] border border-[var(--color-rule)] text-[11px]">
                                   {history.map((msg, mIdx) => (
-                                    <div key={mIdx} className="text-xs leading-relaxed">
-                                      <span className={`font-semibold mr-1.5 ${msg.role === 'user' ? 'text-primary' : 'text-emerald-400'}`}>
-                                        {msg.role === 'user' ? 'You:' : 'AI:'}
+                                    <div key={mIdx}>
+                                      <span className={`font-semibold mr-1.5 ${msg.role === 'user' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink)]'}`}>
+                                        {msg.role === 'user' ? 'user@enterprise:~$' : 'agent@langgraph:#'}
                                       </span>
-                                      <span className="text-muted-foreground whitespace-pre-line">{msg.text}</span>
+                                      <span className="text-[var(--color-ink-2)]">{msg.text}</span>
                                     </div>
                                   ))}
                                 </div>
@@ -405,30 +401,30 @@ export function ReviewPanel({
                               {/* Chat input box */}
                               {isChatOpen && (
                                 <div className="flex items-center gap-2 pt-1">
-                                  <Input 
+                                  <input 
                                     type="text" 
-                                    placeholder="Ask follow-up question about this finding..."
+                                    placeholder="ask follow-up question..."
                                     value={chatQuestion}
                                     onChange={(e) => setChatQuestion(e.target.value)}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') handleSendFollowup(issue);
                                     }}
-                                    className="h-7 text-xs bg-background/50 border-input/60"
+                                    className="flex-1 h-7 text-xs bg-[var(--color-paper)] border border-[var(--color-rule-2)] px-2 text-[var(--color-ink)] focus:outline-none"
                                   />
-                                  <Button 
-                                    size="icon-xs" 
+                                  <button 
+                                    type="button"
                                     onClick={() => handleSendFollowup(issue)}
                                     disabled={chatLoading}
-                                    className="h-7 w-7 shrink-0"
+                                    className="btn-terminal-primary text-[11px] h-7 px-2.5"
                                   >
-                                    {chatLoading ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />}
-                                  </Button>
+                                    {chatLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                                  </button>
                                 </div>
                               )}
                             </div>
                           </div>
                         )}
-                      </Card>
+                      </div>
                     );
                   })}
                 </div>
@@ -447,80 +443,87 @@ export function ReviewPanel({
             {/* TAB 3: UNIT TESTS */}
             {activeTab === REVIEW_MODES.TESTS && (
               <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between border-b border-[var(--color-rule)] pb-2">
                   <div>
-                    <div className="text-sm font-semibold text-foreground tracking-tight">
-                      Automated Unit Tests
+                    <div className="text-xs font-semibold text-[var(--color-ink)] uppercase tracking-wide">
+                      automated unit test suite
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Executable pytest test suite generated for edge-case validation.
+                    <div className="text-[11px] text-[var(--color-muted)]">
+                      pytest executable assertions validating boundaries & edge cases.
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={handleCopyTests} className="h-7 text-xs gap-1.5">
-                      <Copy className="size-3" />
-                      <span>{copiedTest ? 'Copied' : 'Copy'}</span>
-                    </Button>
-
-                    <Button 
-                      size="sm"
-                      onClick={handleExecuteTests}
-                      disabled={isRunningTests}
-                      className="h-7 text-xs gap-1.5 shadow-sm"
+                    <button 
+                      type="button" 
+                      onClick={handleCopyTests}
+                      className="btn-terminal-secondary text-[11px] py-1 px-2.5"
                     >
-                      {isRunningTests ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
-                      <span>{isRunningTests ? 'Running...' : 'Run Tests'}</span>
-                    </Button>
+                      {copiedTest ? <Check className="w-3 h-3 text-[var(--color-accent)]" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedTest ? 'copied' : 'copy tests'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleExecuteTests}
+                      disabled={isRunningTests || !reviewResult.unitTests}
+                      className="btn-terminal-primary text-[11px] py-1 px-3"
+                    >
+                      <Play className="w-3 h-3 fill-current" />
+                      <span>{isRunningTests ? 'running...' : 'execute in sandbox'}</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* TEST RUN RESULT BANNER */}
+                {/* Test Code Box */}
+                <div className="p-3 border border-[var(--color-rule)] bg-[var(--color-paper-2)] text-xs overflow-x-auto max-h-[380px]">
+                  <pre className="text-[var(--color-ink-2)] leading-relaxed">
+                    <code>{reviewResult.unitTests || '# No tests generated.'}</code>
+                  </pre>
+                </div>
+
+                {/* Real-time Test Output from Subprocess */}
                 {testRunResult && (
-                  <div 
-                    className={`rounded-lg border p-3 flex items-center justify-between ${
-                      testRunResult.success 
-                        ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400' 
-                        : 'bg-rose-500/10 border-rose-500/25 text-rose-400'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      {testRunResult.success ? (
-                        <CheckCircle2 className="size-4 shrink-0 text-emerald-400" />
-                      ) : (
-                        <XCircle className="size-4 shrink-0 text-rose-400" />
-                      )}
-                      <div>
-                        <div className="text-xs font-semibold">
-                          {testRunResult.success ? 'All Tests Passed' : 'Tests Failed'}
-                        </div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {testRunResult.passed} Passed • {testRunResult.failed} Failed • Runtime: {testRunResult.runtime}s
-                        </div>
-                      </div>
+                  <div className="border border-[var(--color-rule)] bg-[var(--color-paper)] p-3 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-semibold">
+                      <span className={testRunResult.success ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]'}>
+                        {testRunResult.success ? '[SUCCESS] ALL ASSERTIONS PASSED' : '[FAILED] TEST ASSERTIONS FAILED'}
+                      </span>
+                      <span className="text-[var(--color-muted)] text-[11px]">
+                        {testRunResult.passed}/{testRunResult.total} passed in {testRunResult.runtime}s
+                      </span>
+                    </div>
+
+                    <div className="p-2 border border-[var(--color-rule)] bg-[var(--color-paper-2)] text-[11px] text-[var(--color-ink-2)] overflow-x-auto">
+                      <pre className="whitespace-pre-wrap">{testRunResult.output || testRunResult.traceback}</pre>
                     </div>
                   </div>
                 )}
-
-                {/* Test Code Box */}
-                <div className="rounded-lg border border-border/50 bg-[#07090e] p-3 font-mono text-xs leading-relaxed max-h-[460px] overflow-y-auto">
-                  <pre><code>{reviewResult.unitTests}</code></pre>
-                </div>
               </div>
             )}
 
             {/* TAB 4: EXPLAIN */}
             {activeTab === REVIEW_MODES.EXPLAIN && (
-              <div className="flex flex-col gap-2.5">
-                <div className="text-sm font-semibold text-foreground tracking-tight">
-                  Architecture & Code Explanation
+              <div className="flex flex-col gap-3">
+                <div className="terminal-well p-4 space-y-2 text-xs">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-accent)]">
+                    # architectural evaluation synopsis
+                  </div>
+                  <p className="text-[var(--color-ink-2)] leading-relaxed text-[11.5px]">
+                    {reviewResult.summary || 'Summary not available.'}
+                  </p>
                 </div>
-                
-                <Card className="bg-card/70 border-border/50 backdrop-blur-sm">
-                  <CardContent className="p-4 text-xs leading-relaxed text-muted-foreground whitespace-pre-line">
-                    {reviewResult.explanation}
-                  </CardContent>
-                </Card>
+
+                {reviewResult.codeExplanation && (
+                  <div className="terminal-well p-4 space-y-2 text-xs">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-ink)]">
+                      # code decomposition & execution trace
+                    </div>
+                    <div className="p-2.5 bg-[var(--color-paper)] border border-[var(--color-rule)] text-[11.5px] text-[var(--color-ink-2)] whitespace-pre-wrap leading-relaxed">
+                      {reviewResult.codeExplanation}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </>
@@ -529,3 +532,5 @@ export function ReviewPanel({
     </div>
   );
 }
+
+export default ReviewPanel;
