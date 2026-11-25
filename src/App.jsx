@@ -498,8 +498,8 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {/* Tab 1: 4-Pillar Project Scorecard */}
-        {activeTab === 'scorecard' && (
+        {/* Tab 1: 4-Pillar Project Scorecard (only shown after a review is run) */}
+        {activeTab === 'scorecard' && reviewReport && (
           <div className="flex flex-col space-y-6">
             {/* Top Score Summary Banner */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -509,7 +509,7 @@ export default function App() {
                 </span>
                 <div className="flex items-baseline space-x-2 mt-2">
                   <span className="font-serif text-5xl text-[#8fbcbb]">
-                    {reviewReport ? reviewReport.overall_score : '8.6'}
+                    {reviewReport.overall_score}
                   </span>
                   <span className="text-xs text-[#5f6773]">/ 10.0</span>
                 </div>
@@ -519,12 +519,7 @@ export default function App() {
               </div>
 
               {/* 4-Pillars Cards with Stagger */}
-              {(reviewReport?.pillars || [
-                { name: 'Code Quality', score: 8.5, verdict: 'Clean separation of concerns with isolated pure functions.' },
-                { name: 'Originality', score: 8.0, verdict: 'Pragmatic algorithmic design using hash map lookups.' },
-                { name: 'Completeness', score: 9.0, verdict: 'Covers edge cases and empty file conditions robustly.' },
-                { name: 'Docs', score: 8.8, verdict: 'Clear docstrings, parameter explanations, and type annotations.' }
-              ]).map((pillar, idx) => (
+              {(reviewReport.pillars || []).map((pillar, idx) => (
                 <motion.div
                   key={pillar.name}
                   initial={{ opacity: 0, y: 10 }}
@@ -565,28 +560,7 @@ export default function App() {
               </div>
 
               <div className="space-y-3">
-                {(reviewReport?.comments || [
-                  {
-                    id: 'sample-1',
-                    start_line: 10,
-                    end_line: 11,
-                    severity: 'critical',
-                    title: 'Arbitrary Code Execution via eval()',
-                    suggestion: 'Avoid dynamic evaluation of untrusted strings. Use safe AST parsing or explicit lookup tables.',
-                    fixed_code: 'return VALID_DISCOUNTS.get(discount_code, 0.0)',
-                    confidence: 0.98
-                  },
-                  {
-                    id: 'sample-2',
-                    start_line: 23,
-                    end_line: 28,
-                    severity: 'optimization',
-                    title: 'O(N * M) Quadratic Search Bottleneck',
-                    suggestion: 'Pre-index the product catalog into a dictionary for O(1) constant time member lookup.',
-                    fixed_code: 'catalog_map = {p["id"]: p for p in catalog.get("products", [])}',
-                    confidence: 0.91
-                  }
-                ]).map((comment) => (
+                {(reviewReport.comments || []).map((comment) => (
                   <div
                     key={comment.id}
                     className="p-3.5 rounded-lg border border-[#262b33] bg-[#111315] flex flex-col md:flex-row md:items-center justify-between gap-3"
