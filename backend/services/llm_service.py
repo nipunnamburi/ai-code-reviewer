@@ -1,18 +1,39 @@
 """
 LLM Service & Review Aggregator
-Integrates OpenAI API, Prompt Engineering with Static Analysis Context,
-DSA Complexity Profiling, Deterministic Scoring, and Conversational Follow-up Chat.
+Integrates:
+- OpenAI API with LangSmith Tracing (@traceable)
+- Guardrails AI Schema Validation & Sanitization
+- AST Static Analysis Context
+- DSA Complexity Profiling
+- Deterministic Scoring
+- Conversational Follow-up Chat
 """
 
 import os
 import json
-import httpx
+import logging
 from typing import Dict, Any, List, Optional
+import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# LangSmith tracing decorator support
+try:
+    from langsmith import traceable
+except ImportError:
+    # Graceful fallback if langsmith is not installed or importable
+    def traceable(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
+from backend.services.guardrails_service import validate_review_output
+
+logger = logging.getLogger(__name__)
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
 
 def calculate_deterministic_score(issues: List[Dict[str, Any]], static_findings: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
@@ -51,6 +72,7 @@ def calculate_deterministic_score(issues: List[Dict[str, Any]], static_findings:
     }
 
 
+@traceable(name="review_code_with_llm", run_type="chain")
 async def review_code_with_llm(
     code: str, 
     language: str, 
@@ -60,7 +82,8 @@ async def review_code_with_llm(
     custom_instructions: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Orchestrates Hybrid Review: passes static analysis findings into LLM for deep review
+    Orchestrates Hybrid Review: passes static analysis findings into LLM for deep review,
+    validated by Guardrails AI, traced via LangSmith.
     """
     active_key = api_key or os.getenv("OPENAI_API_KEY", "")
 
@@ -69,12 +92,13 @@ async def review_code_with_llm(
         try:
             return await _call_openai_review(code, language, mode, static_analysis, active_key, custom_instructions)
         except Exception as e:
-            print(f"OpenAI API call failed: {e}. Falling back to server heuristic engine.")
+            logger.error(f"OpenAI API call failed: {e}. Falling back to server heuristic engine.")
 
     # Server heuristic fallback
     return _generate_server_heuristics(code, language, mode, static_analysis)
 
 
+@traceable(name="openai_code_review", run_type="llm")
 async def _call_openai_review(code, language, mode, static_analysis, api_key, custom_instructions):
     static_summary = json.dumps(static_analysis.get("findings", []), indent=2)
 
@@ -132,23 +156,28 @@ Analyze the code and respond strictly in JSON format matching this schema:
         )
         response.raise_for_status()
         data = response.json()
-        parsed = json.loads(data["choices"][0]["message"]["content"])
+        raw_content = data["choices"][0]["message"]["content"]
+        
+        # Guardrails AI Schema Validation & Sanitization
+        validated_data = validate_review_output(raw_content)
         
         # Merge static findings if LLM missed them
-        all_issues = parsed.get("issues", [])
+        all_issues = validated_data.get("issues", [])
         for sf in static_analysis.get("findings", []):
             if not any(i.get("line") == sf.get("line") for i in all_issues):
                 all_issues.append(sf)
 
         scores = calculate_deterministic_score(all_issues, static_analysis.get("findings", []))
-        parsed["score"] = scores["overall"]
-        parsed["metrics"] = scores
-        parsed["staticAnalysis"] = static_analysis
-        return parsed
+        validated_data["issues"] = all_issues
+        validated_data["score"] = scores["overall"]
+        validated_data["metrics"] = scores
+        validated_data["staticAnalysis"] = static_analysis
+        return validated_data
 
 
+@traceable(name="server_heuristic_review", run_type="chain")
 def _generate_server_heuristics(code: str, language: str, mode: str, static_analysis: Dict[str, Any]) -> Dict[str, Any]:
-    """Comprehensive fallback engine for offline / demo mode"""
+    """Comprehensive fallback engine for offline / demo mode with Guardrails validation"""
     issues = list(static_analysis.get("findings", []))
     lines = code.splitlines()
 
@@ -198,10 +227,8 @@ def _generate_server_heuristics(code: str, language: str, mode: str, static_anal
     # Unit tests
     unit_tests = _generate_unit_tests(code, language)
 
-    return {
-        "score": scores["overall"],
+    raw_output = {
         "summary": f"Hybrid review identified {len(issues)} finding(s) with deterministic health score {scores['overall']}/100.",
-        "metrics": scores,
         "complexity": {
             "time": time_complexity,
             "space": space_complexity,
@@ -212,9 +239,15 @@ def _generate_server_heuristics(code: str, language: str, mode: str, static_anal
         "issues": issues,
         "refactoredCode": refactored_code,
         "unitTests": unit_tests,
-        "staticAnalysis": static_analysis,
         "explanation": f"The codebase was analyzed via Python AST parser + static security heuristics. {len(issues)} areas for optimization and security hardening were detected."
     }
+
+    # Pass through Guardrails validation to ensure contract consistency
+    validated_output = validate_review_output(raw_output)
+    validated_output["score"] = scores["overall"]
+    validated_output["metrics"] = scores
+    validated_output["staticAnalysis"] = static_analysis
+    return validated_output
 
 
 def _generate_refactored_snippet(code: str, language: str) -> str:
@@ -290,13 +323,14 @@ describe('Unit Tests', () => {
 });"""
 
 
+@traceable(name="conversational_chat", run_type="chain")
 async def handle_conversational_chat(
     question: str,
     context_code: str,
     issue_context: Optional[Dict[str, Any]] = None,
     api_key: Optional[str] = None
 ) -> str:
-    """Answers follow-up questions regarding specific findings or code logic"""
+    """Answers follow-up questions regarding specific findings or code logic with LangSmith tracing"""
     active_key = api_key or os.getenv("OPENAI_API_KEY", "")
     
     if active_key and active_key.strip().startswith("sk-"):
@@ -327,7 +361,7 @@ Provide a clear, pedagogical, software-engineering explanation with code snippet
                 resp.raise_for_status()
                 return resp.json()["choices"][0]["message"]["content"]
         except Exception as e:
-            print(f"Chat API error: {e}")
+            logger.error(f"Chat API error: {e}")
 
     # Fallback pedagogical response
     q_lower = question.lower()
