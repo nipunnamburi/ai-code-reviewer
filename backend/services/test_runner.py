@@ -1,113 +1,67 @@
 """
-Python Test Runner Service
-Executes user code and generated test suites in an isolated temporary sandbox
-Returns execution results: pass/fail counts, execution time, stdout, stderr, and failure tracebacks.
+Sandboxed Test Runner
+Executes tests in an isolated /tmp workspace with scrubbed environment variables
+to prevent credential leakage and state corruption across serverless & local invocations.
 """
 
 import os
 import sys
-import time
 import tempfile
 import subprocess
 from typing import Dict, Any
 
-def run_python_tests(code: str, test_code: str) -> Dict[str, Any]:
+def run_sandboxed_tests(test_code: str, target_code: str, filename: str = "solution.py") -> Dict[str, Any]:
     """
-    Safely executes test_code against code in an isolated temporary directory.
+    Runs pytest on the provided code in a temporary directory.
+    Uses a scrubbed environment so that sensitive API keys are never leaked to subprocesses.
     """
-    start_time = time.time()
-    
-    with tempfile.TemporaryDirectory() as temp_dir:
-        src_path = os.path.join(temp_dir, "solution.py")
-        test_path = os.path.join(temp_dir, "test_solution.py")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        target_path = os.path.join(tmpdir, filename)
+        test_path = os.path.join(tmpdir, "test_" + filename)
 
-        # Write user source code
-        with open(src_path, "w", encoding="utf-8") as f:
-            f.write(code)
+        with open(target_path, "w", encoding="utf-8") as f:
+            f.write(target_code)
 
-        # Write test file, ensuring it imports from solution
-        full_test_content = f"""# Test Runner Wrapper
-import sys
-import os
-sys.path.insert(0, '{temp_dir}')
-
-{test_code}
-"""
         with open(test_path, "w", encoding="utf-8") as f:
-            f.write(full_test_content)
+            f.write(test_code)
 
-        # Run pytest via subprocess with 5s timeout
+        # Scrubbed environment: only keep essential runtime PATH
+        scrubbed_env = {
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin:/usr/local/bin"),
+            "PYTHONPATH": tmpdir,
+            "HOME": tmpdir,
+            "PYTHONDONTWRITEBYTECODE": "1"
+        }
+
         try:
-            cmd = [sys.executable, "-m", "pytest", test_path, "-v", "--tb=short"]
             result = subprocess.run(
-                cmd,
-                cwd=temp_dir,
+                [sys.executable, "-m", "pytest", test_path, "-v", "--no-header", "--tb=short"],
+                cwd=tmpdir,
+                env=scrubbed_env,
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=15
             )
-            elapsed = round(time.time() - start_time, 3)
-
-            output = result.stdout + "\n" + result.stderr
-            return parse_pytest_output(result.returncode, output, elapsed)
-
+            return {
+                "success": result.returncode == 0,
+                "exit_code": result.returncode,
+                "output": result.stdout + ("\n" + result.stderr if result.stderr else ""),
+                "total_passed": result.stdout.count("PASSED"),
+                "total_failed": result.stdout.count("FAILED")
+            }
         except subprocess.TimeoutExpired:
             return {
                 "success": False,
-                "passed": 0,
-                "failed": 1,
-                "total": 1,
-                "runtime": 5.0,
-                "output": "Execution timed out (5.0s limit exceeded). Check for infinite loops.",
-                "traceback": "TimeoutExpired: Test execution took longer than 5 seconds."
+                "exit_code": -1,
+                "output": "Execution timed out after 15 seconds.",
+                "total_passed": 0,
+                "total_failed": 1
             }
         except Exception as e:
             return {
                 "success": False,
-                "passed": 0,
-                "failed": 1,
-                "total": 1,
-                "runtime": round(time.time() - start_time, 3),
-                "output": str(e),
-                "traceback": f"Test runner execution error: {str(e)}"
+                "exit_code": -1,
+                "output": f"Test runner execution error: {str(e)}",
+                "total_passed": 0,
+                "total_failed": 1
             }
-
-def parse_pytest_output(returncode: int, output: str, elapsed: float) -> Dict[str, Any]:
-    """Parses pytest stdout/stderr to extract counts"""
-    passed = 0
-    failed = 0
-
-    # Look for patterns like "2 passed, 1 failed in 0.05s" or "3 passed in 0.02s"
-    for line in output.splitlines():
-        if "passed" in line or "failed" in line:
-            import re
-            p_match = re.search(r"(\d+)\s+passed", line)
-            f_match = re.search(r"(\d+)\s+failed", line)
-            e_match = re.search(r"(\d+)\s+error", line)
-            
-            if p_match:
-                passed = int(p_match.group(1))
-            if f_match:
-                failed += int(f_match.group(1))
-            if e_match:
-                failed += int(e_match.group(1))
-
-    total = passed + failed
-    if total == 0:
-        # Fallback if no specific count line matched
-        if returncode == 0:
-            passed = 1
-            total = 1
-        else:
-            failed = 1
-            total = 1
-
-    return {
-        "success": (returncode == 0 and failed == 0),
-        "passed": passed,
-        "failed": failed,
-        "total": total,
-        "runtime": elapsed,
-        "output": output.strip(),
-        "traceback": output if returncode != 0 else ""
-    }

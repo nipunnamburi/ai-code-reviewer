@@ -1,25 +1,26 @@
 """
 FastAPI Backend Application
-Hybrid AI + Static Analysis Code Review System
+Dual-mode runtime supporting both local uvicorn and Vercel serverless.
 """
 
+import json
+import os
+from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
 
-from backend.analyzers.ast_analyzer import analyze_code_static
-from backend.services.llm_service import review_code_with_llm, handle_conversational_chat
-from backend.services.test_runner import run_python_tests
+from backend.services.reviewer import stream_review_pipeline, run_pass1_ast_and_diff, generate_offline_report
+from backend.services.test_runner import run_sandboxed_tests
 from backend.services.github_service import fetch_github_pr_files
 
 app = FastAPI(
-    title="Hybrid AI + Static Analysis Code Reviewer API",
-    version="2.0.0",
-    description="Full-stack code review, AST static analysis, DSA complexity profiler, and Python test runner"
+    title="Editorial AI Code Reviewer API",
+    version="3.0.0",
+    description="Dual-mode hybrid code review engine with 4-pillar scorecard and line-bounded Monaco diff integration"
 )
 
-# Allow React Frontend origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,26 +29,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Request Models
-class ReviewRequest(BaseModel):
+class ReviewStreamRequest(BaseModel):
     code: str
     language: str = "python"
-    mode: str = "comprehensive"
+    target_name: str = "snippet.py"
     api_key: Optional[str] = None
-    custom_instructions: Optional[str] = None
+    model: str = "gemini-3.8-flash"
 
-class TestRunRequest(BaseModel):
+class TestExecutionRequest(BaseModel):
     code: str
     test_code: str
-    language: str = "python"
+    filename: str = "solution.py"
 
-class ChatRequest(BaseModel):
-    question: str
-    context_code: str
-    issue_context: Optional[Dict[str, Any]] = None
-    api_key: Optional[str] = None
-
-class GitHubPRRequest(BaseModel):
+class GitHubFetchRequest(BaseModel):
     pr_url: str
 
 @app.get("/api/health")
@@ -55,71 +49,52 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "ai-code-reviewer-backend",
-        "engine": "FastAPI + Python AST + Pytest + LLM"
+        "dual_mode": True,
+        "engine": "google-genai + AST + FastMCP"
     }
 
-@app.post("/api/review")
-async def review_code(req: ReviewRequest):
+@app.post("/api/review/stream")
+async def stream_review(req: ReviewStreamRequest):
     """
-    Hybrid review pipeline:
-    1. Static AST / Linter Analysis
-    2. LLM deep review with static findings context
-    3. Deterministic score aggregation
+    Streams SSE events for real-time file reading, AST analysis,
+    deep review, and line-bounds reflection.
     """
     if not req.code or not req.code.strip():
         raise HTTPException(status_code=400, detail="Code cannot be empty.")
 
-    # 1. Run static analysis
-    static_results = analyze_code_static(req.code, req.language)
+    async def event_generator():
+        try:
+            async for chunk in stream_review_pipeline(
+                code=req.code,
+                language=req.language,
+                target_name=req.target_name,
+                api_key=req.api_key,
+                model_choice=req.model
+            ):
+                event_name = chunk.get("event", "message")
+                data_str = json.dumps(chunk.get("data", {}))
+                yield f"event: {event_name}\ndata: {data_str}\n\n"
+        except Exception as e:
+            err_data = json.dumps({"error": str(e)})
+            yield f"event: error\ndata: {err_data}\n\n"
 
-    # 2. Run LLM review augmented with static findings
-    review_output = await review_code_with_llm(
-        code=req.code,
-        language=req.language,
-        mode=req.mode,
-        static_analysis=static_results,
-        api_key=req.api_key,
-        custom_instructions=req.custom_instructions
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
     )
 
-    return review_output
+@app.post("/api/tests/run")
+async def execute_tests(req: TestExecutionRequest):
+    return run_sandboxed_tests(req.test_code, req.code, req.filename)
 
-@app.post("/api/run-tests")
-async def run_tests(req: TestRunRequest):
-    """
-    Executes code and test suite in an isolated test runner sandbox.
-    """
-    if not req.code.strip():
-        raise HTTPException(status_code=400, detail="Source code cannot be empty.")
-    if not req.test_code.strip():
-        raise HTTPException(status_code=400, detail="Test code cannot be empty.")
-
-    results = run_python_tests(code=req.code, test_code=req.test_code)
-    return results
-
-@app.post("/api/chat")
-async def chat_followup(req: ChatRequest):
-    """
-    Handles conversational follow-up questions regarding specific findings.
-    """
-    if not req.question.strip():
-        raise HTTPException(status_code=400, detail="Question cannot be empty.")
-
-    answer = await handle_conversational_chat(
-        question=req.question,
-        context_code=req.context_code,
-        issue_context=req.issue_context,
-        api_key=req.api_key
-    )
-    return {"answer": answer}
-
-@app.post("/api/github-pr")
-async def import_github_pr(req: GitHubPRRequest):
-    """
-    Fetches changed files from a public GitHub Pull Request URL.
-    """
-    try:
-        data = await fetch_github_pr_files(req.pr_url)
-        return data
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+@app.post("/api/github/pr")
+async def fetch_github_pr(req: GitHubFetchRequest):
+    res = await fetch_github_pr_files(req.pr_url)
+    if "error" in res:
+        raise HTTPException(status_code=400, detail=res["error"])
+    return res

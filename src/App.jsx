@@ -1,521 +1,751 @@
 import React, { useState, useEffect, useRef } from 'react';
-import * as Y from 'yjs';
-import { IndexeddbPersistence } from 'y-indexeddb';
+import { motion, AnimatePresence } from 'motion/react';
+import { DiffEditor } from '@monaco-editor/react';
 import { 
-  Folder, 
-  FileCode, 
-  Terminal, 
+  CheckCircle2, 
+  AlertTriangle, 
+  AlertOctagon, 
+  Sparkles, 
+  Info, 
   Play, 
-  ChevronDown, 
-  ChevronUp, 
+  ChevronRight, 
+  History, 
+  GitBranch, 
   Layers, 
-  HardDrive, 
-  Users, 
+  FileCode, 
   Check, 
-  ShieldCheck, 
-  Activity, 
-  Plus,
-  GitPullRequest
+  X, 
+  Clock, 
+  Terminal 
 } from 'lucide-react';
-import { Header } from './components/Header';
-import { CodeEditor } from './components/CodeEditor';
-import { ReviewPanel } from './components/ReviewPanel';
-import { ApiKeyModal } from './components/ApiKeyModal';
-import { ExportModal } from './components/ExportModal';
-import { GitHubPrModal } from './components/GitHubPrModal';
-import { SAMPLE_SNIPPETS } from './data/sampleSnippets';
-import { REVIEW_MODES } from './services/aiService';
-import { requestReview, checkBackendHealth, executeTests } from './services/apiClient';
+import { ydoc, yprovider, yReviewsArray, yStagedAnnotations, saveReviewToHistory } from './services/crdt';
 
-export function App() {
-  const [code, setCode] = useState(SAMPLE_SNIPPETS[0].code);
-  const [language, setLanguage] = useState(SAMPLE_SNIPPETS[0].language);
-  const [activeSnippetId, setActiveSnippetId] = useState(SAMPLE_SNIPPETS[0].id);
-  const [selectedModel, setSelectedModel] = useState('gpt-4o');
-  const [reviewMode, setReviewMode] = useState(REVIEW_MODES.COMPREHENSIVE);
-  const [activeTab, setActiveTab] = useState(REVIEW_MODES.COMPREHENSIVE);
-  const [activeView, setActiveView] = useState('editor');
+const DEFAULT_SAMPLE_CODE = `"""
+E-commerce checkout processor with common item lookup.
+Contains quadratic nested iterations and unprotected evaluation.
+"""
+import os
+import json
 
-  // Sidebar toggle (Obsidian-Code Activity Bar)
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+def calculate_discount(discount_code, subtotal):
+    # Security risk: dynamic evaluation of arbitrary code
+    return eval(discount_code)
 
-  // Bottom Panel Drawer (Obsidian-Code BottomPanel Runner)
-  const [isBottomOpen, setIsBottomOpen] = useState(false);
-  const [activeBottomTab, setActiveBottomTab] = useState('runner'); // 'runner' | 'pytest' | 'crdt' | 'man'
-  const [runnerLogs, setRunnerLogs] = useState([]);
+def find_common_purchases(customer_orders_file, catalog_file):
+    try:
+        with open(customer_orders_file, 'r') as f:
+            orders = json.load(f)
+        with open(catalog_file, 'r') as f:
+            catalog = json.load(f)
+    except:
+        # Bare except hides critical filesystem errors
+        return []
 
-  // Backend health status
-  const [backendOnline, setBackendOnline] = useState(false);
+    common_items = []
+    # O(N * M) nested bottleneck
+    for order in orders:
+        for item in order.get("items", []):
+            for product in catalog.get("products", []):
+                if item["id"] == product["id"]:
+                    common_items.append(product)
 
-  // API Key & Custom Prompts with LocalStorage persistence
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('ai_code_reviewer_key') || '');
-  const [customPrompt, setCustomPrompt] = useState(() => localStorage.getItem('ai_code_reviewer_prompt') || '');
+    return common_items
+`;
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState('scorecard'); // 'scorecard' | 'workbench' | 'history'
+  const [modelChoice, setModelChoice] = useState('gemini-3.8-flash');
+  const [apiKey, setApiKey] = useState('');
   
-  // Modals state
-  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [isPrModalOpen, setIsPrModalOpen] = useState(false);
+  // Input State
+  const [inputMode, setInputMode] = useState('code'); // 'code' | 'github'
+  const [code, setCode] = useState(DEFAULT_SAMPLE_CODE);
+  const [originalCode, setOriginalCode] = useState(DEFAULT_SAMPLE_CODE);
+  const [modifiedCode, setModifiedCode] = useState(DEFAULT_SAMPLE_CODE);
+  const [githubUrl, setGithubUrl] = useState('');
+  const [targetFileName, setTargetFileName] = useState('checkout_service.py');
 
-  // Review states
+  // Review State
   const [isReviewing, setIsReviewing] = useState(false);
-  const [reviewResult, setReviewResult] = useState(null);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [streamSteps, setStreamSteps] = useState([]);
+  const [reviewReport, setReviewReport] = useState(null);
+  const [historyItems, setHistoryItems] = useState([]);
+  const [selectedCommentId, setSelectedCommentId] = useState(null);
+  const [commentStatuses, setCommentStatuses] = useState({});
 
-  // CRDT Yjs & IndexedDB Persistence References (Obsidian-Code Architecture)
-  const ydocRef = useRef(null);
-  const idbRef = useRef(null);
-  const [isIdbSynced, setIsIdbSynced] = useState(false);
-  const [crdtTransactions, setCrdtTransactions] = useState(1);
+  const diffEditorRef = useRef(null);
 
-  // Initialize Y.Doc & IndexeddbPersistence on mount (Local-First Offline Sync)
+  // Sync Yjs history
   useEffect(() => {
-    let isMounted = true;
-    try {
-      const doc = new Y.Doc();
-      ydocRef.current = doc;
-      const ytext = doc.getText('content');
-
-      // Hydrate with initial code
-      doc.transact(() => {
-        if (ytext.length === 0) {
-          ytext.insert(0, SAMPLE_SNIPPETS[0].code);
-        }
-      }, 'seed-code');
-
-      // Local-first browser IndexedDB cache
-      const persistence = new IndexeddbPersistence('ai-code-reviewer-atelier', doc);
-      idbRef.current = persistence;
-
-      persistence.on('synced', () => {
-        if (isMounted) {
-          setIsIdbSynced(true);
-          setRunnerLogs(prev => [
-            ...prev,
-            `[CRDT_IDB] local room 'ai-code-reviewer-atelier' hydrated from IndexedDB (zero network latency)`
-          ]);
-        }
+    const updateFromYjs = () => {
+      setHistoryItems(yReviewsArray.toArray());
+      const statuses = {};
+      yStagedAnnotations.forEach((val, key) => {
+        statuses[key] = val;
       });
-
-      doc.on('update', () => {
-        if (isMounted) setCrdtTransactions(prev => prev + 1);
-      });
-    } catch (err) {
-      console.warn('CRDT initialization warning:', err);
-    }
-
-    // Ping FastAPI Backend
-    const pingBackend = async () => {
-      const isUp = await checkBackendHealth();
-      if (isMounted) setBackendOnline(isUp);
+      setCommentStatuses(statuses);
     };
-    pingBackend();
-    const interval = setInterval(pingBackend, 8000);
+
+    yprovider.on('synced', updateFromYjs);
+    yReviewsArray.observe(updateFromYjs);
+    yStagedAnnotations.observe(updateFromYjs);
 
     return () => {
-      isMounted = false;
-      clearInterval(interval);
-      if (idbRef.current) idbRef.current.destroy();
+      yReviewsArray.unobserve(updateFromYjs);
+      yStagedAnnotations.unobserve(updateFromYjs);
     };
   }, []);
 
-  // Save API key / prompt handlers
-  const handleSaveApiKey = (key) => {
-    setApiKey(key);
-    localStorage.setItem('ai_code_reviewer_key', key);
-  };
+  // Configure custom Monaco theme
+  function handleEditorWillMount(monaco) {
+    monaco.editor.defineTheme('soothing-slate', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '5f6773', fontStyle: 'italic' },
+        { token: 'keyword', foreground: '8fbcbb' },
+        { token: 'string', foreground: 'a3be8c' },
+        { token: 'number', foreground: 'ebcb8b' },
+        { token: 'identifier', foreground: 'eceef2' },
+      ],
+      colors: {
+        'editor.background': '#171a1e',
+        'editor.foreground': '#eceef2',
+        'editor.lineHighlightBackground': '#1e2228',
+        'editorLineNumber.foreground': '#5f6773',
+        'editorLineNumber.activeForeground': '#8fbcbb',
+        'diffEditor.insertedTextBackground': '#a3be8c18',
+        'diffEditor.removedTextBackground': '#bf616a18',
+        'diffEditor.insertedLineBackground': '#a3be8c0d',
+        'diffEditor.removedLineBackground': '#bf616a0d',
+        'editorGutter.background': '#171a1e',
+        'scrollbarSlider.background': '#262b3366',
+        'scrollbarSlider.hoverBackground': '#262b33bb',
+      }
+    });
+  }
 
-  const handleSaveCustomPrompt = (prompt) => {
-    setCustomPrompt(prompt);
-    localStorage.setItem('ai_code_reviewer_prompt', prompt);
-  };
+  function handleDiffMount(editor) {
+    diffEditorRef.current = editor;
+  }
 
-  // Load sample snippet from Sidebar or Dropdown
-  const handleSelectSample = (sampleId) => {
-    const found = SAMPLE_SNIPPETS.find(s => s.id === sampleId);
-    if (found) {
-      setActiveSnippetId(found.id);
-      setCode(found.code);
-      setLanguage(found.language);
-      setReviewResult(null);
-      setErrorMsg('');
+  // Handle Review Stream Submission
+  async function startReview() {
+    setIsReviewing(true);
+    setStreamSteps([]);
+    setSelectedCommentId(null);
 
-      // Update CRDT text
-      if (ydocRef.current) {
-        const ytext = ydocRef.current.getText('content');
-        ydocRef.current.transact(() => {
-          ytext.delete(0, ytext.length);
-          ytext.insert(0, found.code);
-        }, 'switch-file');
+    let codeToReview = code;
+    let fileName = targetFileName;
+
+    // Handle GitHub PR if selected
+    if (inputMode === 'github') {
+      try {
+        setStreamSteps([{ step: 'github', detail: `Fetching PR files from ${githubUrl}...` }]);
+        const prRes = await fetch('/api/github/pr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pr_url: githubUrl })
+        });
+        const prData = await prRes.json();
+        if (prData.files && prData.files.length > 0) {
+          codeToReview = prData.files[0].patch || prData.files[0].content || code;
+          fileName = prData.files[0].filename || 'pr_diff.patch';
+          setCode(codeToReview);
+          setTargetFileName(fileName);
+        }
+      } catch (err) {
+        console.warn('GitHub fetch error, using fallback code:', err);
+      }
+    }
+
+    setOriginalCode(codeToReview);
+    setModifiedCode(codeToReview);
+
+    try {
+      const response = await fetch('/api/review/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: codeToReview,
+          language: fileName.endsWith('.js') || fileName.endsWith('.jsx') ? 'javascript' : 'python',
+          target_name: fileName,
+          api_key: apiKey || null,
+          model: modelChoice
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}`);
       }
 
-      setRunnerLogs(prev => [
-        ...prev,
-        `[WORKSPACE] loaded file: ${found.id}.${found.language} (${found.title})`
-      ]);
-    }
-  };
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
 
-  // Execute AI Review via FastAPI / Hybrid Engine
-  const handleRunReview = async (overrideCode = null) => {
-    const targetCode = overrideCode || code;
-    if (!targetCode.trim()) return;
-    setIsReviewing(true);
-    setErrorMsg('');
-    setIsBottomOpen(true);
-    setActiveBottomTab('runner');
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-    const startTime = performance.now();
-    setRunnerLogs(prev => [
-      ...prev,
-      `$ reviewer audit --lang ${language} --model ${selectedModel} --engine hybrid`,
-      `[STATIC_AST] parsing abstract syntax tree (cyclomatic complexity & loop nesting)...`
-    ]);
-    
-    try {
-      const result = await requestReview({
-        code: targetCode,
-        language,
-        mode: reviewMode,
-        apiKey,
-        customInstructions: customPrompt
-      });
-      setReviewResult(result);
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
 
-      const elapsed = ((performance.now() - startTime) / 1000).toFixed(3);
-      setRunnerLogs(prev => [
-        ...prev,
-        `[LLM_ENGINE] response received (score: ${result.score}/100 | ${result.issues?.length || 0} issues found)`,
-        `[AUDIT_COMPLETE] duration: ${elapsed}s (exit 0, nominal)`
-      ]);
+        for (const rawEvent of events) {
+          const lines = rawEvent.split('\n');
+          let eventType = 'message';
+          let dataStr = '';
+
+          for (const l of lines) {
+            if (l.startsWith('event: ')) {
+              eventType = l.slice(7).trim();
+            } else if (l.startsWith('data: ')) {
+              dataStr = l.slice(6).trim();
+            }
+          }
+
+          if (dataStr) {
+            try {
+              const parsed = JSON.parse(dataStr);
+              if (eventType === 'progress') {
+                setStreamSteps(prev => [...prev, parsed]);
+              } else if (eventType === 'complete') {
+                setReviewReport(parsed);
+                // Apply refactored code proposal or comments
+                if (parsed.refactored_code) {
+                  setModifiedCode(parsed.refactored_code);
+                }
+                saveReviewToHistory(parsed);
+              }
+            } catch (e) {
+              console.error('Failed to parse SSE data:', e);
+            }
+          }
+        }
+      }
     } catch (err) {
-      console.error('Review failed:', err);
-      setErrorMsg(err.message || 'Failed to review code. Please try again.');
-      setRunnerLogs(prev => [
-        ...prev,
-        `[AUDIT_ERROR] ${err.message || 'Review failed.'} (exit 1)`
-      ]);
+      console.error('Stream failure:', err);
+      setStreamSteps(prev => [...prev, { step: 'error', detail: `Review connection failed: ${err.message}` }]);
     } finally {
       setIsReviewing(false);
     }
+  }
+
+  // Accept a single comment fix
+  function acceptCommentFix(comment) {
+    if (!comment.fixed_code) return;
+    
+    const lines = modifiedCode.split('\n');
+    const startIdx = Math.max(0, comment.start_line - 1);
+    const endIdx = Math.min(lines.length, comment.end_line);
+
+    const newLines = [
+      ...lines.slice(0, startIdx),
+      comment.fixed_code,
+      ...lines.slice(endIdx)
+    ];
+
+    const updated = newLines.join('\n');
+    setModifiedCode(updated);
+
+    // Save status in Yjs map
+    yStagedAnnotations.set(comment.id, 'accepted');
+  }
+
+  function dismissComment(commentId) {
+    yStagedAnnotations.set(commentId, 'dismissed');
+  }
+
+  const severityIcons = {
+    critical: <AlertOctagon className="w-3.5 h-3.5 text-[#bf616a]" />,
+    warning: <AlertTriangle className="w-3.5 h-3.5 text-[#ebcb8b]" />,
+    optimization: <Sparkles className="w-3.5 h-3.5 text-[#a3be8c]" />,
+    info: <Info className="w-3.5 h-3.5 text-[#8fbcbb]" />
   };
 
-  // Auto-run initial review on mount
-  useEffect(() => {
-    handleRunReview();
-  }, []);
-
-  // Apply refactored code to the editor
-  const handleApplyRefactor = (newCode) => {
-    setCode(newCode);
-    if (ydocRef.current) {
-      const ytext = ydocRef.current.getText('content');
-      ydocRef.current.transact(() => {
-        ytext.delete(0, ytext.length);
-        ytext.insert(0, newCode);
-      }, 'apply-refactor');
-    }
-    setRunnerLogs(prev => [
-      ...prev,
-      `[REFACTOR_APPLIED] updated buffer with AI-proposed remediation`
-    ]);
-    setTimeout(() => {
-      handleRunReview(newCode);
-    }, 200);
-  };
-
-  // Handle GitHub PR Import
-  const handleLoadPrCode = (prCode, detectedLang) => {
-    setCode(prCode);
-    setLanguage(detectedLang);
-    handleRunReview(prCode);
-  };
-
-  // Switch view from Multiplexer header (1:editor, 2:diff, 3:tests, 4:complexity)
-  const handleChangeView = (viewId) => {
-    setActiveView(viewId);
-    if (viewId === 'diff') {
-      setActiveTab(REVIEW_MODES.REFACTOR);
-    } else if (viewId === 'tests') {
-      setActiveTab(REVIEW_MODES.TESTS);
-    } else if (viewId === 'complexity' || viewId === 'editor') {
-      setActiveTab(REVIEW_MODES.COMPREHENSIVE);
-    }
+  const severityBadges = {
+    critical: 'bg-[#bf616a18] text-[#bf616a] border-[#bf616a33]',
+    warning: 'bg-[#ebcb8b18] text-[#ebcb8b] border-[#ebcb8b33]',
+    optimization: 'bg-[#a3be8c18] text-[#a3be8c] border-[#a3be8c33]',
+    info: 'bg-[#8fbcbb18] text-[#8fbcbb] border-[#8fbcbb33]'
   };
 
   return (
-    <div className="app-container font-mono">
-      {/* 1. Multiplexer Status Bar Header */}
-      <Header
-        selectedModel={selectedModel}
-        onSelectModel={setSelectedModel}
-        apiKey={apiKey}
-        onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
-        onOpenExportModal={() => setIsExportModalOpen(true)}
-        onOpenPrModal={() => setIsPrModalOpen(true)}
-        onSelectSample={handleSelectSample}
-        samples={SAMPLE_SNIPPETS}
-        isReviewing={isReviewing}
-        backendOnline={backendOnline}
-        activeView={activeView}
-        onChangeView={handleChangeView}
-        crdtTransactions={crdtTransactions}
-      />
+    <div className="min-h-screen bg-[#111315] text-[#eceef2] font-sans flex flex-col selection:bg-[#8fbcbb33] selection:text-[#eceef2]">
+      {/* 48px Slim Top Bar */}
+      <header className="h-12 border-b border-[#262b33] bg-[#111315]/90 backdrop-blur-md sticky top-0 z-50 px-4 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <span className="font-serif italic text-lg tracking-tight text-[#eceef2]">
+            Antigravity Reviewer
+          </span>
+          <span className="text-[10px] uppercase font-mono tracking-wider px-1.5 py-0.5 rounded border border-[#262b33] text-[#98a0ad]">
+            Dual-Mode
+          </span>
+        </div>
 
-      {/* 2. Main Workbench Area: Activity Sidebar + Editor + Review Panel */}
-      <div className="workbench-grid grid-cols-1 md:grid-cols-12 overflow-hidden bg-[var(--color-paper)]">
-        {/* Left: Obsidian-Code Activity Bar & File Explorer Sidebar */}
-        {isSidebarOpen && (
-          <div className="md:col-span-2 border-r border-[var(--color-rule)] bg-[var(--color-paper-2)] flex flex-col justify-between p-2.5 overflow-hidden text-xs">
-            <div>
-              <div className="flex items-center justify-between pb-2 mb-2 border-b border-[var(--color-rule)] text-[10.5px] text-[var(--color-muted)] uppercase tracking-wider">
-                <span className="flex items-center gap-1 font-semibold text-[var(--color-ink)]">
-                  <Folder className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-                  <span>explorer</span>
-                </span>
-                <span>{SAMPLE_SNIPPETS.length} files</span>
-              </div>
+        {/* View Switcher Tabs with layoutId pill */}
+        <div className="flex items-center p-0.5 rounded-lg bg-[#171a1e] border border-[#262b33] text-xs">
+          {[
+            { id: 'scorecard', label: 'Scorecard', icon: Layers },
+            { id: 'workbench', label: 'Diff Workbench', icon: FileCode },
+            { id: 'history', label: 'History Board', icon: History }
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative px-3 py-1 rounded-md font-medium flex items-center space-x-1.5 transition-colors z-10 ${
+                  isActive ? 'text-[#eceef2]' : 'text-[#98a0ad] hover:text-[#eceef2]'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+                {isActive && (
+                  <motion.div
+                    layoutId="active-view-pill"
+                    className="absolute inset-0 bg-[#1e2228] border border-[#262b33] rounded-md -z-10 shadow-sm"
+                    transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-              {/* Snippet / File List */}
-              <div className="flex flex-col gap-1 overflow-y-auto max-h-[calc(100vh-220px)]">
-                {SAMPLE_SNIPPETS.map((snippet) => {
-                  const isSelected = activeSnippetId === snippet.id;
-                  return (
-                    <button
-                      key={snippet.id}
-                      type="button"
-                      onClick={() => handleSelectSample(snippet.id)}
-                      className={`text-left p-2 border text-xs transition-colors flex flex-col gap-0.5 ${
-                        isSelected
-                          ? "bg-[var(--color-paper-3)] border-[var(--color-accent)] text-[var(--color-ink)] shadow-[inset_2px_0_0_var(--color-accent)] font-semibold"
-                          : "bg-[var(--color-paper)] border-[var(--color-rule)] text-[var(--color-muted)] hover:border-[var(--color-rule-2)] hover:text-[var(--color-ink)]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="truncate text-[11px] text-[var(--color-ink)]">
-                          {snippet.title}
-                        </span>
-                        <span className="text-[9px] px-1 py-0.2 border border-[var(--color-rule-2)] text-[var(--color-accent)] flex-shrink-0">
-                          {snippet.language}
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-[var(--color-muted)] line-clamp-1">
-                        {snippet.difficulty || 'audit scenario'}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+        {/* Model Selector & API Key */}
+        <div className="flex items-center space-x-2 text-xs">
+          <input
+            type="password"
+            placeholder="Gemini API Key (optional)"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            className="bg-[#171a1e] border border-[#262b33] rounded px-2.5 py-1 text-xs text-[#eceef2] placeholder-[#5f6773] focus:outline-none focus:border-[#8fbcbb] w-40"
+          />
+          <select
+            value={modelChoice}
+            onChange={(e) => setModelChoice(e.target.value)}
+            className="bg-[#171a1e] border border-[#262b33] rounded px-2.5 py-1 text-xs text-[#eceef2] focus:outline-none focus:border-[#8fbcbb]"
+          >
+            <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+          </select>
+        </div>
+      </header>
+
+      {/* Main Container */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-6 flex flex-col space-y-6">
+        {/* Editorial Hero Header */}
+        <div className="pt-2 pb-4 border-b border-[#262b33] flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <h1 className="font-serif text-4xl tracking-tight text-[#eceef2] mb-1">
+              Your code, honestly reviewed.
+            </h1>
+            <p className="text-sm text-[#98a0ad]">
+              A 3-pass hybrid engine combining AST analysis, deep 4-pillar scorecard evaluation, and bounded line reflection.
+            </p>
+          </div>
+
+          {/* Unified Input Switcher & Trigger Button */}
+          <div className="flex items-center space-x-3">
+            <div className="flex rounded-md bg-[#171a1e] border border-[#262b33] p-0.5 text-xs">
+              <button
+                onClick={() => setInputMode('code')}
+                className={`px-3 py-1 rounded transition-colors ${
+                  inputMode === 'code' ? 'bg-[#1e2228] text-[#eceef2]' : 'text-[#98a0ad]'
+                }`}
+              >
+                Code / Diff
+              </button>
+              <button
+                onClick={() => setInputMode('github')}
+                className={`px-3 py-1 rounded transition-colors ${
+                  inputMode === 'github' ? 'bg-[#1e2228] text-[#eceef2]' : 'text-[#98a0ad]'
+                }`}
+              >
+                GitHub PR URL
+              </button>
             </div>
 
-            {/* Sidebar Bottom: CRDT Presence & Room Info */}
-            <div className="pt-2 border-t border-[var(--color-rule)] text-[10.5px] text-[var(--color-muted)] space-y-1">
-              <div className="flex items-center justify-between">
-                <span>crdt room:</span>
-                <span className="text-[var(--color-accent)]">atelier-main</span>
+            <button
+              onClick={startReview}
+              disabled={isReviewing}
+              className="px-4 py-1.5 rounded-md bg-[#8fbcbb] text-[#111315] font-medium text-xs flex items-center space-x-1.5 hover:bg-[#a3be8c] transition-colors disabled:opacity-50"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>{isReviewing ? 'Analyzing...' : 'Run Review'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Input Bar when GitHub mode is active */}
+        {inputMode === 'github' && (
+          <div className="bg-[#171a1e] border border-[#262b33] rounded-lg p-3 flex items-center space-x-3 text-xs">
+            <GitBranch className="w-4 h-4 text-[#8fbcbb]" />
+            <input
+              type="text"
+              placeholder="https://github.com/owner/repo/pull/12"
+              value={githubUrl}
+              onChange={(e) => setGithubUrl(e.target.value)}
+              className="flex-1 bg-transparent border-none text-[#eceef2] focus:outline-none placeholder-[#5f6773]"
+            />
+          </div>
+        )}
+
+        {/* Live File-Inspection Ticker (AnimatePresence) */}
+        <AnimatePresence>
+          {streamSteps.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+              className="bg-[#171a1e] border border-[#262b33] rounded-lg p-3 font-mono text-xs flex flex-col space-y-1.5 shadow-sm"
+            >
+              <div className="flex items-center space-x-2 text-[#98a0ad] text-[11px] uppercase tracking-wider pb-1 border-b border-[#262b33]">
+                <div className="w-2 h-2 rounded-full bg-[#8fbcbb] animate-pulse" />
+                <span>Live Pipeline Execution Log</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span>indexeddb:</span>
-                <span className="text-[var(--color-ink-2)]">{isIdbSynced ? "cached" : "syncing"}</span>
+              <div className="max-h-28 overflow-y-auto space-y-1 pr-2">
+                {streamSteps.map((s, idx) => (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, x: -4 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="flex items-start space-x-2 text-[#98a0ad]"
+                  >
+                    <span className="text-[#5f6773] select-none">›</span>
+                    <span className="text-[#eceef2] font-semibold">[{s.step}]</span>
+                    <span>{s.detail || s.file}</span>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Tab 1: 4-Pillar Project Scorecard */}
+        {activeTab === 'scorecard' && (
+          <div className="flex flex-col space-y-6">
+            {/* Top Score Summary Banner */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-[#171a1e] border border-[#262b33] rounded-lg p-4 flex flex-col justify-between">
+                <span className="text-xs uppercase font-mono tracking-wider text-[#98a0ad]">
+                  Composite Score
+                </span>
+                <div className="flex items-baseline space-x-2 mt-2">
+                  <span className="font-serif text-5xl text-[#8fbcbb]">
+                    {reviewReport ? reviewReport.overall_score : '8.6'}
+                  </span>
+                  <span className="text-xs text-[#5f6773]">/ 10.0</span>
+                </div>
+                <span className="text-xs text-[#98a0ad] mt-2">
+                  Weighted 4-pillar index
+                </span>
+              </div>
+
+              {/* 4-Pillars Cards with Stagger */}
+              {(reviewReport?.pillars || [
+                { name: 'Code Quality', score: 8.5, verdict: 'Clean separation of concerns with isolated pure functions.' },
+                { name: 'Originality', score: 8.0, verdict: 'Pragmatic algorithmic design using hash map lookups.' },
+                { name: 'Completeness', score: 9.0, verdict: 'Covers edge cases and empty file conditions robustly.' },
+                { name: 'Docs', score: 8.8, verdict: 'Clear docstrings, parameter explanations, and type annotations.' }
+              ]).map((pillar, idx) => (
+                <motion.div
+                  key={pillar.name}
+                  initial={{ opacity: 0, y: 10 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.4, delay: idx * 0.06 }}
+                  className="bg-[#171a1e] border border-[#262b33] rounded-lg p-4 flex flex-col justify-between hover:bg-[#1e2228] transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-[#eceef2]">{pillar.name}</span>
+                    <span className="text-xs font-mono font-medium px-2 py-0.5 rounded border border-[#262b33] bg-[#111315] text-[#8fbcbb]">
+                      {pillar.score}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#98a0ad] mt-3 leading-relaxed">
+                    {pillar.verdict}
+                  </p>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Findings List preview */}
+            <div className="bg-[#171a1e] border border-[#262b33] rounded-lg p-5">
+              <div className="flex items-center justify-between pb-3 border-b border-[#262b33] mb-4">
+                <div className="flex items-center space-x-2">
+                  <FileCode className="w-4 h-4 text-[#8fbcbb]" />
+                  <h3 className="text-sm font-semibold text-[#eceef2]">
+                    Line-Bounded Findings & Actionable Fixes
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setActiveTab('workbench')}
+                  className="text-xs text-[#8fbcbb] hover:underline flex items-center space-x-1"
+                >
+                  <span>Open in Diff Workbench</span>
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {(reviewReport?.comments || [
+                  {
+                    id: 'sample-1',
+                    start_line: 10,
+                    end_line: 11,
+                    severity: 'critical',
+                    title: 'Arbitrary Code Execution via eval()',
+                    suggestion: 'Avoid dynamic evaluation of untrusted strings. Use safe AST parsing or explicit lookup tables.',
+                    fixed_code: 'return VALID_DISCOUNTS.get(discount_code, 0.0)',
+                    confidence: 0.98
+                  },
+                  {
+                    id: 'sample-2',
+                    start_line: 23,
+                    end_line: 28,
+                    severity: 'optimization',
+                    title: 'O(N * M) Quadratic Search Bottleneck',
+                    suggestion: 'Pre-index the product catalog into a dictionary for O(1) constant time member lookup.',
+                    fixed_code: 'catalog_map = {p["id"]: p for p in catalog.get("products", [])}',
+                    confidence: 0.91
+                  }
+                ]).map((comment) => (
+                  <div
+                    key={comment.id}
+                    className="p-3.5 rounded-lg border border-[#262b33] bg-[#111315] flex flex-col md:flex-row md:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-start space-x-3">
+                      <div className="mt-0.5">{severityIcons[comment.severity]}</div>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs font-semibold text-[#eceef2]">{comment.title}</span>
+                          <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${severityBadges[comment.severity]}`}>
+                            {comment.severity}
+                          </span>
+                          <span className="text-[11px] font-mono text-[#5f6773]">
+                            L{comment.start_line}–{comment.end_line}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#98a0ad] mt-1">{comment.suggestion}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2 self-end md:self-center">
+                      <button
+                        onClick={() => {
+                          acceptCommentFix(comment);
+                          setActiveTab('workbench');
+                        }}
+                        className="px-2.5 py-1 rounded bg-[#1e2228] border border-[#262b33] text-xs text-[#eceef2] hover:border-[#8fbcbb] flex items-center space-x-1"
+                      >
+                        <Check className="w-3 h-3 text-[#a3be8c]" />
+                        <span>Accept Fix</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         )}
 
-        {/* Center: Monaco Code Editor Workspace */}
-        <div className={`${isSidebarOpen ? 'md:col-span-5' : 'md:col-span-6'} flex flex-col h-full overflow-hidden border-r border-[var(--color-rule)]`}>
-          <CodeEditor
-            code={code}
-            onChangeCode={setCode}
-            language={language}
-            onChangeLanguage={setLanguage}
-            onRunReview={() => handleRunReview()}
-            isReviewing={isReviewing}
-            reviewMode={reviewMode}
-          />
-        </div>
+        {/* Tab 2: Monaco Diff Workbench */}
+        {activeTab === 'workbench' && (
+          <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-[560px]">
+            {/* Monaco Diff Editor (65% width) */}
+            <div className="flex-1 md:w-[65%] border border-[#262b33] rounded-lg overflow-hidden bg-[#171a1e] flex flex-col">
+              <div className="h-9 px-4 bg-[#111315] border-b border-[#262b33] flex items-center justify-between text-xs text-[#98a0ad]">
+                <div className="flex items-center space-x-2">
+                  <span className="font-mono text-[#5f6773]">Original vs. Refactored Patch</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1e2228] text-[#8fbcbb]">
+                    {targetFileName}
+                  </span>
+                </div>
+                <span className="text-[11px] font-mono">Soothing Slate Monaco Diff</span>
+              </div>
+              <div className="flex-1 min-h-[500px]">
+                <DiffEditor
+                  height="100%"
+                  language="python"
+                  original={originalCode}
+                  modified={modifiedCode}
+                  theme="soothing-slate"
+                  beforeMount={handleEditorWillMount}
+                  onMount={handleDiffMount}
+                  options={{
+                    renderSideBySide: true,
+                    readOnly: false,
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    fontSize: 13,
+                    fontFamily: "'Geist Mono Variable', monospace",
+                    smoothScrolling: true,
+                  }}
+                />
+              </div>
+            </div>
 
-        {/* Right: Review & Analytics Panel */}
-        <div className={`${isSidebarOpen ? 'md:col-span-5' : 'md:col-span-6'} flex flex-col h-full overflow-hidden bg-[var(--color-paper)]`}>
-          <ReviewPanel
-            reviewResult={reviewResult}
-            isReviewing={isReviewing}
-            originalCode={code}
-            language={language}
-            apiKey={apiKey}
-            onApplyRefactor={handleApplyRefactor}
-            activeTab={activeTab}
-            onChangeTab={setActiveTab}
-            onRunReview={() => handleRunReview()}
-          />
-        </div>
-      </div>
+            {/* Staged Annotations Drawer (35% width) */}
+            <div className="md:w-[35%] border border-[#262b33] rounded-lg bg-[#171a1e] flex flex-col overflow-hidden">
+              <div className="h-9 px-4 bg-[#111315] border-b border-[#262b33] flex items-center justify-between text-xs font-semibold text-[#eceef2]">
+                <div className="flex items-center space-x-2">
+                  <Layers className="w-3.5 h-3.5 text-[#8fbcbb]" />
+                  <span>Staged Annotations ({reviewReport?.comments?.length || 0})</span>
+                </div>
+                <span className="text-[10px] font-mono text-[#98a0ad]">Synced via Yjs</span>
+              </div>
 
-      {/* 3. Collapsible Bottom Panel (Obsidian-Code BottomPanel Architecture) */}
-      <div className="border-t border-[var(--color-rule)] bg-[var(--color-paper-2)] shrink-0">
-        <div className="h-7 px-3 bg-[var(--color-paper-3)] border-b border-[var(--color-rule)] flex items-center justify-between text-xs">
-          {/* Bottom Tabs */}
-          <div className="flex items-center gap-1 h-full">
-            <button
-              type="button"
-              onClick={() => {
-                setActiveBottomTab('runner');
-                setIsBottomOpen(true);
-              }}
-              className={`px-2.5 h-full text-[11px] border-b-2 flex items-center gap-1 ${
-                activeBottomTab === 'runner' && isBottomOpen
-                  ? "border-[var(--color-accent)] text-[var(--color-accent)] font-bold bg-[var(--color-paper-2)]"
-                  : "border-transparent text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-              }`}
-            >
-              <Terminal className="w-3 h-3" />
-              <span>[01: Terminal Output]</span>
-            </button>
+              <div className="flex-1 p-3 overflow-y-auto space-y-3">
+                {(reviewReport?.comments || []).length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#5f6773] text-xs">
+                    <Terminal className="w-8 h-8 mb-2 stroke-1" />
+                    <span>No active annotations yet.</span>
+                    <span className="text-[11px] mt-1 text-[#98a0ad]">
+                      Run a review or paste code to generate line-level suggestions.
+                    </span>
+                  </div>
+                ) : (
+                  (reviewReport?.comments || []).map((comment) => {
+                    const status = commentStatuses[comment.id] || 'pending';
+                    const isAccepted = status === 'accepted';
+                    const isDismissed = status === 'dismissed';
 
-            <button
-              type="button"
-              onClick={() => {
-                setActiveBottomTab('crdt');
-                setIsBottomOpen(true);
-              }}
-              className={`px-2.5 h-full text-[11px] border-b-2 flex items-center gap-1 ${
-                activeBottomTab === 'crdt' && isBottomOpen
-                  ? "border-[var(--color-accent)] text-[var(--color-accent)] font-bold bg-[var(--color-paper-2)]"
-                  : "border-transparent text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-              }`}
-            >
-              <Layers className="w-3 h-3" />
-              <span>[02: CRDT & Offline IDB]</span>
-            </button>
+                    return (
+                      <div
+                        key={comment.id}
+                        className={`p-3 rounded-md border transition-all text-xs ${
+                          isAccepted
+                            ? 'bg-[#111315] border-[#a3be8c44] opacity-80'
+                            : isDismissed
+                            ? 'bg-[#111315] border-[#262b33] opacity-40'
+                            : 'bg-[#111315] border-[#262b33] hover:border-[#8fbcbb55]'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center space-x-1.5">
+                            {severityIcons[comment.severity]}
+                            <span className="font-semibold text-[#eceef2]">{comment.title}</span>
+                          </div>
+                          <span className="font-mono text-[10px] text-[#5f6773]">
+                            L{comment.start_line}–{comment.end_line}
+                          </span>
+                        </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setActiveBottomTab('man');
-                setIsBottomOpen(true);
-              }}
-              className={`px-2.5 h-full text-[11px] border-b-2 flex items-center gap-1 ${
-                activeBottomTab === 'man' && isBottomOpen
-                  ? "border-[var(--color-accent)] text-[var(--color-accent)] font-bold bg-[var(--color-paper-2)]"
-                  : "border-transparent text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-              }`}
-            >
-              <FileCode className="w-3 h-3" />
-              <span>[03: Man Synopsis]</span>
-            </button>
+                        <p className="text-xs text-[#98a0ad] mt-1.5 leading-relaxed">
+                          {comment.suggestion}
+                        </p>
+
+                        {comment.fixed_code && (
+                          <div className="mt-2 p-2 rounded bg-[#171a1e] border border-[#262b33] font-mono text-[11px] text-[#a3be8c] overflow-x-auto">
+                            <code>{comment.fixed_code}</code>
+                          </div>
+                        )}
+
+                        <div className="mt-3 flex items-center justify-end space-x-2 pt-2 border-t border-[#262b33]">
+                          {!isAccepted && !isDismissed && (
+                            <>
+                              <button
+                                onClick={() => dismissComment(comment.id)}
+                                className="px-2 py-0.5 rounded text-[11px] text-[#98a0ad] hover:text-[#eceef2] flex items-center space-x-1"
+                              >
+                                <X className="w-3 h-3" />
+                                <span>Dismiss</span>
+                              </button>
+                              <button
+                                onClick={() => acceptCommentFix(comment)}
+                                className="px-2.5 py-1 rounded bg-[#8fbcbb] text-[#111315] font-medium text-[11px] flex items-center space-x-1 hover:bg-[#a3be8c] transition-colors"
+                              >
+                                <Check className="w-3 h-3" />
+                                <span>Apply Patch</span>
+                              </button>
+                            </>
+                          )}
+                          {isAccepted && (
+                            <span className="text-[11px] text-[#a3be8c] font-medium flex items-center space-x-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Patch Applied</span>
+                            </span>
+                          )}
+                          {isDismissed && (
+                            <span className="text-[11px] text-[#5f6773]">Dismissed</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
           </div>
+        )}
 
-          {/* Panel Toggle button */}
-          <button
-            type="button"
-            onClick={() => setIsBottomOpen(!isBottomOpen)}
-            className="p-1 text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-            title={isBottomOpen ? "Collapse Panel" : "Expand Panel"}
-          >
-            {isBottomOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-          </button>
-        </div>
+        {/* Tab 3: Local Review History Board (y-indexeddb) */}
+        {activeTab === 'history' && (
+          <div className="bg-[#171a1e] border border-[#262b33] rounded-lg p-5">
+            <div className="flex items-center justify-between pb-3 border-b border-[#262b33] mb-4">
+              <div className="flex items-center space-x-2">
+                <History className="w-4 h-4 text-[#8fbcbb]" />
+                <h3 className="text-sm font-semibold text-[#eceef2]">
+                  Review History Board (Persisted Locally via CRDT)
+                </h3>
+              </div>
+              <span className="text-xs text-[#5f6773] font-mono">
+                {historyItems.length} review(s) stored
+              </span>
+            </div>
 
-        {/* Drawer Content */}
-        {isBottomOpen && (
-          <div className="p-3 max-h-[140px] overflow-y-auto bg-[var(--color-paper)] text-xs text-[var(--color-ink-2)]">
-            {activeBottomTab === 'runner' && (
-              <div className="flex flex-col gap-1">
-                {runnerLogs.map((log, idx) => (
-                  <div 
-                    key={idx}
-                    className={
-                      log.startsWith("$")
-                        ? "text-[var(--color-accent)] font-semibold"
-                        : log.includes("exit 0") || log.includes("AUDIT_COMPLETE")
-                        ? "text-[var(--color-ink)]"
-                        : "text-[var(--color-muted)]"
-                    }
+            {historyItems.length === 0 ? (
+              <div className="text-center py-12 text-[#5f6773] text-xs">
+                No past reviews recorded yet. Run your first review above!
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {historyItems.map((item, idx) => (
+                  <div
+                    key={item.id || idx}
+                    className="p-4 rounded-lg border border-[#262b33] bg-[#111315] hover:bg-[#1e2228] transition-colors flex flex-col justify-between"
                   >
-                    {log}
+                    <div>
+                      <div className="flex items-center justify-between text-xs text-[#98a0ad]">
+                        <span className="font-mono text-[#8fbcbb] truncate max-w-[180px]">
+                          {item.repo_or_file_name || 'snippet.py'}
+                        </span>
+                        <span className="font-serif text-lg text-[#eceef2]">
+                          {item.overall_score} / 10.0
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#98a0ad] mt-2 line-clamp-2">
+                        {item.summary}
+                      </p>
+                    </div>
+
+                    <div className="mt-4 pt-2 border-t border-[#262b33] flex items-center justify-between text-[11px] text-[#5f6773]">
+                      <div className="flex items-center space-x-1">
+                        <Clock className="w-3 h-3" />
+                        <span>{item.saved_at ? new Date(item.saved_at).toLocaleTimeString() : 'Recent'}</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setReviewReport(item);
+                          if (item.refactored_code) setModifiedCode(item.refactored_code);
+                          setActiveTab('workbench');
+                        }}
+                        className="text-[#8fbcbb] hover:underline"
+                      >
+                        Reopen Diff →
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
-
-            {activeBottomTab === 'crdt' && (
-              <div className="flex flex-col gap-1 text-[11px]">
-                <div className="text-[var(--color-accent)] font-semibold">
-                  # Yjs Conflict-Free Replicated Data Type (CRDT) Diagnostics
-                </div>
-                <div>• Canonical Room: 'ai-code-reviewer-atelier'</div>
-                <div>• Local IndexedDB Cache: {isIdbSynced ? "HYDRATED & SYNCED" : "CONNECTING"}</div>
-                <div>• Lamport State Vector Transactions: tx_{crdtTransactions}</div>
-                <div>• Awareness Mesh: 3 active collaborative peers (You, agent.ai, auditor)</div>
-              </div>
-            )}
-
-            {activeBottomTab === 'man' && (
-              <div className="flex flex-col gap-1 text-[11px]">
-                <div className="text-[var(--color-accent)] font-semibold">
-                  # man (1) reviewer · subsystem flags
-                </div>
-                <div>• $ reviewer audit [--lang &lt;str&gt;] [--model gpt-4o] : executes hybrid static AST + LLM code review</div>
-                <div>• $ reviewer test [--runner pytest] : runs sandboxed assertions in temporary isolation</div>
-                <div>• $ reviewer diff [--apply] : computes line unified diff and commits changes to Monaco buffer</div>
-              </div>
-            )}
           </div>
         )}
-      </div>
-
-      {/* 4. Bottom Status Bar (Obsidian-Code StatusBar Architecture) */}
-      <footer className="h-7 px-3 bg-[var(--color-paper-2)] border-t border-[var(--color-rule)] flex items-center justify-between text-[11px] text-[var(--color-muted)] shrink-0">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="hover:text-[var(--color-ink)]"
-            title="Toggle File Explorer Sidebar"
-          >
-            [sidebar: {isSidebarOpen ? 'show' : 'hide'}]
-          </button>
-          <span>|</span>
-          <span className="text-[var(--color-ink-2)]">{language.toUpperCase()}</span>
-          <span>|</span>
-          <span>UTF-8</span>
-          <span>|</span>
-          <span>spaces: 4</span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <span>idb: {isIdbSynced ? "cached" : "syncing"}</span>
-          <span>|</span>
-          <span>fastapi: {backendOnline ? "8000 (ok)" : "offline"}</span>
-          <span>|</span>
-          <span className="text-[var(--color-accent)] font-semibold">exit 0</span>
-        </div>
-      </footer>
-
-      {/* Modals */}
-      <ApiKeyModal
-        isOpen={isApiKeyModalOpen}
-        onClose={() => setIsApiKeyModalOpen(false)}
-        apiKey={apiKey}
-        onSaveApiKey={handleSaveApiKey}
-        customPrompt={customPrompt}
-        onSaveCustomPrompt={handleSaveCustomPrompt}
-      />
-
-      <ExportModal
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        reviewResult={reviewResult}
-        originalCode={code}
-        language={language}
-      />
-
-      <GitHubPrModal
-        isOpen={isPrModalOpen}
-        onClose={() => setIsPrModalOpen(false)}
-        onLoadPRCode={handleLoadPrCode}
-      />
+      </main>
     </div>
   );
 }
-
-export default App;
