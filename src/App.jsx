@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { DiffEditor } from '@monaco-editor/react';
+import Editor, { DiffEditor } from '@monaco-editor/react';
 import { 
   CheckCircle2, 
   AlertTriangle, 
@@ -16,41 +16,11 @@ import {
   Check, 
   X, 
   Clock, 
-  Terminal 
+  Terminal,
+  Upload,
+  FileText
 } from 'lucide-react';
 import { ydoc, yprovider, yReviewsArray, yStagedAnnotations, saveReviewToHistory } from './services/crdt';
-
-const DEFAULT_SAMPLE_CODE = `"""
-E-commerce checkout processor with common item lookup.
-Contains quadratic nested iterations and unprotected evaluation.
-"""
-import os
-import json
-
-def calculate_discount(discount_code, subtotal):
-    # Security risk: dynamic evaluation of arbitrary code
-    return eval(discount_code)
-
-def find_common_purchases(customer_orders_file, catalog_file):
-    try:
-        with open(customer_orders_file, 'r') as f:
-            orders = json.load(f)
-        with open(catalog_file, 'r') as f:
-            catalog = json.load(f)
-    except:
-        # Bare except hides critical filesystem errors
-        return []
-
-    common_items = []
-    # O(N * M) nested bottleneck
-    for order in orders:
-        for item in order.get("items", []):
-            for product in catalog.get("products", []):
-                if item["id"] == product["id"]:
-                    common_items.append(product)
-
-    return common_items
-`;
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('scorecard'); // 'scorecard' | 'workbench' | 'history'
@@ -59,11 +29,14 @@ export default function App() {
   
   // Input State
   const [inputMode, setInputMode] = useState('code'); // 'code' | 'github'
-  const [code, setCode] = useState(DEFAULT_SAMPLE_CODE);
-  const [originalCode, setOriginalCode] = useState(DEFAULT_SAMPLE_CODE);
-  const [modifiedCode, setModifiedCode] = useState(DEFAULT_SAMPLE_CODE);
+  const [code, setCode] = useState('');
+  const [originalCode, setOriginalCode] = useState('');
+  const [modifiedCode, setModifiedCode] = useState('');
   const [githubUrl, setGithubUrl] = useState('');
-  const [targetFileName, setTargetFileName] = useState('checkout_service.py');
+  const [targetFileName, setTargetFileName] = useState('snippet.py');
+
+  // File upload input ref
+  const fileInputRef = useRef(null);
 
   // Review State
   const [isReviewing, setIsReviewing] = useState(false);
@@ -256,6 +229,26 @@ export default function App() {
     yStagedAnnotations.set(commentId, 'dismissed');
   }
 
+  // Handle local file upload
+  function handleFileUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setTargetFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result;
+      if (typeof content === 'string') {
+        setCode(content);
+        setOriginalCode(content);
+        setModifiedCode(content);
+      }
+    };
+    reader.readAsText(file);
+    // Reset file input so re-uploading the same file works
+    e.target.value = '';
+  }
+
   const severityIcons = {
     critical: <AlertOctagon className="w-3.5 h-3.5 text-[#bf616a]" />,
     warning: <AlertTriangle className="w-3.5 h-3.5 text-[#ebcb8b]" />,
@@ -366,6 +359,98 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {/* Hidden file input for uploading code files */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileUpload}
+          className="hidden"
+          accept=".py,.js,.jsx,.ts,.tsx,.json,.sql,.html,.css,.txt,.java,.cpp,.c,.go,.rs,.rb"
+        />
+
+        {/* Code Input & File Upload Bar when Code mode is active */}
+        {inputMode === 'code' && (
+          <div className="bg-[#171a1e] border border-[#262b33] rounded-lg overflow-hidden flex flex-col">
+            <div className="h-9 px-4 bg-[#111315] border-b border-[#262b33] flex items-center justify-between text-xs text-[#98a0ad]">
+              <div className="flex items-center space-x-2">
+                <FileText className="w-3.5 h-3.5 text-[#8fbcbb]" />
+                <input
+                  type="text"
+                  value={targetFileName}
+                  onChange={(e) => setTargetFileName(e.target.value)}
+                  className="bg-transparent border-none text-xs font-mono text-[#eceef2] focus:outline-none w-36 hover:bg-[#1e2228] px-1 rounded"
+                  title="Target file name"
+                />
+                <span className="text-[11px] text-[#5f6773] font-mono">• {code.split('\n').length} lines</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-2.5 py-1 rounded bg-[#1e2228] border border-[#262b33] text-xs text-[#eceef2] hover:border-[#8fbcbb] flex items-center space-x-1.5 transition-colors"
+                >
+                  <Upload className="w-3.5 h-3.5 text-[#8fbcbb]" />
+                  <span>Upload File</span>
+                </button>
+                {code && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCode('');
+                      setOriginalCode('');
+                      setModifiedCode('');
+                    }}
+                    className="px-2 py-1 text-xs text-[#5f6773] hover:text-[#eceef2] transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Monaco Editor Container */}
+            <div className="h-56 w-full relative">
+              <Editor
+                height="100%"
+                language={
+                  targetFileName.endsWith('.js') || targetFileName.endsWith('.jsx')
+                    ? 'javascript'
+                    : targetFileName.endsWith('.ts') || targetFileName.endsWith('.tsx')
+                    ? 'typescript'
+                    : 'python'
+                }
+                value={code}
+                onChange={(val) => setCode(val || '')}
+                theme="soothing-slate"
+                beforeMount={handleEditorWillMount}
+                options={{
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  fontSize: 13,
+                  fontFamily: "'Geist Mono Variable', monospace",
+                  lineNumbers: 'on',
+                  folding: false,
+                  wordWrap: 'on',
+                  automaticLayout: true,
+                  placeholder: 'Type, paste, or upload code to start a review...'
+                }}
+              />
+              {!code && (
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center text-center p-4 text-[#5f6773] space-y-1"
+                >
+                  <div className="pointer-events-auto cursor-pointer flex flex-col items-center hover:text-[#98a0ad] transition-colors">
+                    <Upload className="w-5 h-5 mb-1.5 text-[#8fbcbb]" />
+                    <span className="text-xs font-mono text-[#98a0ad]">Type, paste code, or click to upload a file</span>
+                    <span className="text-[11px] text-[#5f6773]">Supports Python, TypeScript, JavaScript, SQL, and more</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Input Bar when GitHub mode is active */}
         {inputMode === 'github' && (
