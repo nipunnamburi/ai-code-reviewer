@@ -43,6 +43,25 @@ class handler(BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length).decode('utf-8')
             payload = json.loads(post_data) if post_data else {}
 
+            if self.path.endswith('/github/pr'):
+                import asyncio
+                from backend.services.github_service import fetch_github_pr_files
+                pr_url = payload.get('pr_url', '')
+                res = asyncio.run(fetch_github_pr_files(pr_url))
+                if "error" in res:
+                    self.send_response(400)
+                    self._send_cors_headers()
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"detail": res["error"]}).encode('utf-8'))
+                    return
+                self.send_response(200)
+                self._send_cors_headers()
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(res).encode('utf-8'))
+                return
+
             code = payload.get('code', '')
             language = payload.get('language', 'python')
             target_name = payload.get('target_name', 'snippet.py')
