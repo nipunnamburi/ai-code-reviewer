@@ -314,23 +314,11 @@ export default function App() {
           })}
         </div>
 
-        {/* Model Selector & API Key */}
+        {/* Clean top-right badge */}
         <div className="flex items-center space-x-2 text-xs">
-          <input
-            type="password"
-            placeholder="Gemini API Key (optional)"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            className="bg-[#171a1e] border border-[#262b33] rounded px-2.5 py-1 text-xs text-[#eceef2] placeholder-[#5f6773] focus:outline-none focus:border-[#8fbcbb] w-40"
-          />
-          <select
-            value={modelChoice}
-            onChange={(e) => setModelChoice(e.target.value)}
-            className="bg-[#171a1e] border border-[#262b33] rounded px-2.5 py-1 text-xs text-[#eceef2] focus:outline-none focus:border-[#8fbcbb]"
-          >
-            <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-          </select>
+          <span className="font-mono text-[11px] text-[#5f6773]">
+            Engine: Hybrid 3-Pass
+          </span>
         </div>
       </header>
 
